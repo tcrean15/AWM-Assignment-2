@@ -1,0 +1,366 @@
+{% extends 'base.html' %}
+
+{% block title %}Map View{% endblock %}
+
+
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-primary">Give your GeoUpdate</h2>
+            <p class="text-muted mb-0">
+                GeoUpdate is an application which allows you to share a note about a specific location with others.
+            </p>
+        </div>
+    </div>
+    <div class="position-relative">
+        <div id="map"></div>
+        <div class="map-controls-container">
+            <button id="addNoteBtn" class="btn btn-primary">
+                <i class="fas fa-plus-circle me-2"></i>Add Note
+            </button>
+            <button class="btn btn-primary" id="locationButton">
+                <i class="fas fa-location-arrow me-2"></i>My Location
+            </button>
+        </div>
+    </div>
+
+    <!-- Alerts -->
+    <div id="successAlert" class="alert alert-success" role="alert" style="display: none;">
+        <i class="fas fa-check-circle me-2"></i>Operation completed successfully!
+    </div>
+    <div id="errorAlert" class="alert alert-danger" role="alert" style="display: none;">
+        <i class="fas fa-exclamation-circle me-2"></i>An error occurred. Please try again.
+    </div>
+</div>
+
+<!-- Note Modal -->
+<div class="modal fade" id="noteModal" tabindex="-1" aria-labelledby="noteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="noteModalLabel">Add New Note</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="noteForm">
+                    <div class="mb-3">
+                        <label for="noteTitle" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="noteTitle" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="noteContent" class="form-label">Content</label>
+                        <textarea class="form-control" id="noteContent" rows="3" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveNoteBtn">Save Note</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function showAlert(selector) {
+        $(selector).fadeIn().delay(3000).fadeOut();
+    }
+
+    function deleteComment(commentId) {
+        if (confirm('Are you sure you want to delete this comment?')) {
+            fetch(`{% url "delete_comment" comment_id=0 %}`.replace('0', commentId), {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.loadNotes();
+                    showAlert('#successAlert');
+                } else {
+                    showAlert('#errorAlert');
+                }
+            });
+        }
+    }
+
+    function addComment(e, noteId) {
+        e.preventDefault();
+        const content = e.target.querySelector('textarea').value;
+        
+        fetch(`{% url "add_comment" note_id=0 %}`.replace('0', noteId), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: `content=${encodeURIComponent(content)}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.loadNotes();
+                e.target.reset();
+                showAlert('#successAlert');
+            } else {
+                showAlert('#errorAlert');
+            }
+        });
+    }
+
+    function deleteNote(noteId) {
+        if (confirm('Are you sure you want to delete this note?')) {
+            fetch(`{% url "delete_note" note_id=0 %}`.replace('0', noteId), {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.map.removeLayer(window.markers[noteId]);
+                    delete window.markers[noteId];
+                    window.map.closePopup();
+                    showAlert('#successAlert');
+                } else {
+                    showAlert('#errorAlert');
+                }
+            });
+        }
+    }
+
+    function editNote(noteId) {
+        $(`#edit-form-${noteId}`).removeClass('d-none');
+    }
+
+    function cancelEdit(noteId) {
+        $(`#edit-form-${noteId}`).addClass('d-none');
+    }
+
+    function submitEdit(e, noteId) {
+        e.preventDefault();
+        const form = e.target;
+        const data = new URLSearchParams({
+            title: form.querySelector('input').value,
+            content: form.querySelector('textarea').value
+        });
+
+        fetch(`{% url "edit_note" note_id=0 %}`.replace('0', noteId), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: data
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.loadNotes();
+                showAlert('#successAlert');
+            } else {
+                showAlert('#errorAlert');
+            }
+        });
+    }
+
+    function addNoteToMap(note) {
+        // Create custom icon using default Leaflet icon
+        const noteIcon = new L.Icon({
+            iconUrl: note.is_owner ? 
+                'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png' : 
+                'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        var marker = L.marker([note.latitude, note.longitude], {
+            icon: noteIcon
+        }).addTo(window.map);
+        
+        window.markers[note.id] = marker;
+        
+        var commentsHtml = note.comments ? note.comments.map(function(comment) {
+            return `
+                <div class="comment mb-2">
+                    <small>${comment.author} - ${comment.created_at}</small>
+                    <p>${comment.content}</p>
+                    ${comment.is_owner ? 
+                        `<button class="btn btn-sm btn-danger" onclick="deleteComment(${comment.id})">Delete</button>` 
+                        : ''}
+                </div>
+            `;
+        }).join('') : '';
+        
+        var popupContent = `
+            <div class="note-popup">
+                <h5>${note.title}</h5>
+                <p>${note.content}</p>
+                <small>By ${note.author} on ${note.created_at}</small>
+                ${note.is_owner ? `
+                    <div class="mt-2">
+                        <button class="btn btn-sm btn-primary" onclick="editNote(${note.id})">Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteNote(${note.id})">Delete</button>
+                    </div>
+                    <div class="edit-form d-none" id="edit-form-${note.id}">
+                        <form onsubmit="submitEdit(event, ${note.id})">
+                            <input type="text" class="form-control mb-2" value="${note.title}" required>
+                            <textarea class="form-control mb-2" required>${note.content}</textarea>
+                            <button type="submit" class="btn btn-sm btn-success">Save</button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="cancelEdit(${note.id})">Cancel</button>
+                        </form>
+                    </div>
+                ` : ''}
+                <hr>
+                <div class="comments">
+                    ${commentsHtml}
+                </div>
+                <form onsubmit="addComment(event, ${note.id})">
+                    <textarea class="form-control mb-2" placeholder="Add a comment" required></textarea>
+                    <button type="submit" class="btn btn-sm btn-primary">Add Comment</button>
+                </form>
+            </div>
+        `;
+        
+        marker.bindPopup(popupContent);
+    }
+
+    window.loadNotes = function() {
+        Object.values(window.markers).forEach(marker => window.map.removeLayer(marker));
+        window.markers = {};
+        
+        fetch('{% url "get_notes" %}')
+            .then(response => response.json())
+            .then(data => {
+                data.notes.forEach(function(note) {
+                    addNoteToMap(note);
+                });
+            })
+            .catch(error => {
+                console.error('Error loading notes:', error);
+                showAlert('#errorAlert');
+            });
+    };
+
+    $(document).ready(function() {
+        window.map = L.map('map').setView([53.3498, -6.2603], 13);
+        window.markers = {};
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(window.map);
+
+        var addNoteMode = false;
+        var selectedLocation = null;
+
+        document.getElementById('addNoteBtn').addEventListener('click', function() {
+            addNoteMode = !addNoteMode;
+            this.classList.toggle('active');
+            
+            // Update button content while preserving the icon
+            const icon = '<i class="fas fa-plus-circle me-2"></i>';
+            this.innerHTML = icon + (addNoteMode ? 'Cancel Adding Note' : 'Add Note');
+        });
+
+        window.map.on('click', function(e) {
+            if (!addNoteMode) return;
+            selectedLocation = e.latlng;
+            $('#noteModal').modal('show');
+        });
+
+        document.getElementById('saveNoteBtn').addEventListener('click', function() {
+            const title = document.getElementById('noteTitle').value;
+            const content = document.getElementById('noteContent').value;
+
+            if (!title || !content || !selectedLocation) return;
+
+            fetch('{% url "add_note" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: `latitude=${selectedLocation.lat}&longitude=${selectedLocation.lng}&title=${encodeURIComponent(title)}&content=${encodeURIComponent(content)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.loadNotes();
+                    document.getElementById('noteForm').reset();
+                    $('#noteModal').modal('hide');
+                    addNoteMode = false;
+                    document.getElementById('addNoteBtn').innerHTML = '<i class="fas fa-plus-circle me-2"></i>Add Note';
+                    document.getElementById('addNoteBtn').classList.remove('active');
+                    showAlert('#successAlert');
+                } else {
+                    showAlert('#errorAlert');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('#errorAlert');
+            });
+        });
+
+        document.getElementById('locationButton').addEventListener('click', function() {
+            const button = this;
+            if (navigator.geolocation) {
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Getting Location...';
+                
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        
+                        // Remove existing location marker if it exists
+                        if (window.userLocationMarker) {
+                            window.map.removeLayer(window.userLocationMarker);
+                        }
+                        
+                        // Create new location marker
+                        window.userLocationMarker = L.marker([lat, lng], {
+                            icon: L.divIcon({
+                                className: 'user-location-marker',
+                                iconSize: [16, 16],
+                                iconAnchor: [8, 8]
+                            })
+                        }).addTo(window.map);
+                        
+                        // Set view to location
+                        window.map.setView([lat, lng], 16);
+                        
+                        // Reset button
+                        button.disabled = false;
+                        button.innerHTML = '<i class="fas fa-location-arrow me-2"></i>My Location';
+                    },
+                    function(error) {
+                        console.error('Geolocation error:', error);
+                        button.disabled = false;
+                        button.innerHTML = '<i class="fas fa-location-arrow me-2"></i>My Location';
+                        alert('Error getting location: ' + error.message);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                alert('Geolocation is not supported by your browser');
+            }
+        });
+
+        window.loadNotes();
+    });
+</script>
+{% endblock %} 

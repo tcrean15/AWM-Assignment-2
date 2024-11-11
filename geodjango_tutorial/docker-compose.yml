@@ -1,0 +1,79 @@
+services:
+  nginx:
+    image: tcrean15/geodjango_nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - static_volume:/app/staticfiles
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - awm_django_app
+    networks:
+      - awm2024
+
+  postgis:
+    image: tcrean15/geodjango_postgis:latest
+    expose:
+      - "5432"
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_MULTIPLE_EXTENSIONS=postgis,hstore,postgis_topology
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: "pg_isready -h localhost -p 5432 -U ${DB_USER}"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - awm2024
+    restart: always
+
+  awm_django_app:
+    #image: tcrean15/geodjango_app:latest
+   
+    build:
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - "8001"
+    depends_on:
+      postgis:
+        condition: service_healthy
+    environment:
+      - DJANGO_SETTINGS_MODULE=geodjango_tutorial.settings
+      - SECRET_KEY=${SECRET_KEY}
+      - DEBUG=False
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=postgis
+      - DB_PORT=5432
+    networks:
+      - awm2024
+    volumes:
+      - static_volume:/app/staticfiles
+    restart: always
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - nginx
+
+networks:
+  awm2024:
+    name: awm2024
+    driver: bridge
+
+volumes:
+  postgres_data:
+  static_volume:
