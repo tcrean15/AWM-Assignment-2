@@ -10,6 +10,7 @@ from django.core.serializers import serialize
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from django.conf import settings
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 @login_required
 def index(request):
@@ -24,6 +25,7 @@ def index(request):
         'settings': settings
     })
 
+@ensure_csrf_cookie
 def login_view(request):
     if request.method == 'POST':
         form = AuthenticationForm(request, data=request.POST)

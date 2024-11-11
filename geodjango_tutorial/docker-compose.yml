@@ -61,14 +61,6 @@ services:
       - static_volume:/app/staticfiles
     restart: always
 
-  certbot:
-    image: certbot/certbot:latest
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    depends_on:
-      - nginx
-
 networks:
   awm2024:
     name: awm2024
