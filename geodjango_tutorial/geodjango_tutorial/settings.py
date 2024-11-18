@@ -162,13 +162,16 @@ LOGOUT_REDIRECT_URL = '/login/'
 
 # Add these settings after the STATIC_URL configuration
 #SECURE_SSL_REDIRECT = True
-SECURE_SSL_REDIRECT = False
+SECURE_SSL_REDIRECT = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
 
 # CSRF Settings
-CSRF_TRUSTED_ORIGINS = ['http://awmassignment1.eu', 'http://161.35.43.118']
-CSRF_USE_SESSIONS = True
+CSRF_TRUSTED_ORIGINS = ['https://awm1.uksouth.cloudapp.azure.com', 'http://awm1.uksouth.cloudapp.azure.com', 'http://20.68.129.252', 'https://20.68.129.252']
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_DOMAIN = None
 CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_NAME = 'csrftoken'
+CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'

@@ -73,7 +73,7 @@
             fetch(`{% url "delete_comment" comment_id=0 %}`.replace('0', commentId), {
                 method: 'POST',
                 headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
+                    'X-CSRFToken': getCSRFToken()
                 }
             })
             .then(response => response.json())
@@ -96,7 +96,7 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'X-CSRFToken': '{{ csrf_token }}'
+                'X-CSRFToken': getCSRFToken()
             },
             body: `content=${encodeURIComponent(content)}`
         })
@@ -117,7 +117,7 @@
             fetch(`{% url "delete_note" note_id=0 %}`.replace('0', noteId), {
                 method: 'POST',
                 headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
+                    'X-CSRFToken': getCSRFToken()
                 }
             })
             .then(response => response.json())
@@ -154,7 +154,7 @@
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'X-CSRFToken': '{{ csrf_token }}'
+                'X-CSRFToken': getCSRFToken()
             },
             body: data
         })
@@ -287,7 +287,7 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': '{{ csrf_token }}'
+                    'X-CSRFToken': getCSRFToken()
                 },
                 body: `latitude=${selectedLocation.lat}&longitude=${selectedLocation.lng}&title=${encodeURIComponent(title)}&content=${encodeURIComponent(content)}`
             })

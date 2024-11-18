@@ -13,6 +13,18 @@ services:
       - awm_django_app
     networks:
       - awm2024
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    command: certonly --webroot --webroot-path=/var/www/certbot 
+             --email c21416014@mytudublin.ie --agree-tos --no-eff-email 
+             -d awm1.uksouth.cloudapp.azure.com
+    depends_on:
+      - nginx
 
   postgis:
     image: tcrean15/geodjango_postgis:latest
@@ -36,7 +48,6 @@ services:
 
   awm_django_app:
     #image: tcrean15/geodjango_app:latest
-   
     build:
       context: .
       dockerfile: Dockerfile
@@ -60,6 +71,7 @@ services:
     volumes:
       - static_volume:/app/staticfiles
     restart: always
+
 
 networks:
   awm2024:

@@ -10,7 +10,7 @@ from django.core.serializers import serialize
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from django.conf import settings
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 
 @login_required
 def index(request):
@@ -41,7 +41,8 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
-@login_required
+@csrf_protect
+@require_POST
 def update_location(request):
     if request.method == 'POST':
         try:
@@ -119,7 +120,7 @@ def get_notes(request):
     
     return JsonResponse({'notes': notes_data})
 
-@login_required
+@csrf_protect
 @require_POST
 def add_note(request):
     try:
@@ -163,7 +164,7 @@ def delete_note(request, note_id):
         'message': 'Note deleted successfully'
     })
 
-@login_required
+@csrf_protect
 @require_POST
 def add_comment(request, note_id):
     note = get_object_or_404(LocationNote, id=note_id)
