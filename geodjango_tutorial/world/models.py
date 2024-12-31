@@ -138,6 +138,7 @@ class Game(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     area_set = models.BooleanField(default=False)
+    radius = models.FloatField(default=500)  # Store the radius in meters
 
     def can_start(self):
         return (

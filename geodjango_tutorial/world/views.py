@@ -231,7 +231,8 @@ class CreateGame(generics.CreateAPIView):
                 host=request.user if request.user.is_authenticated else None,
                 start_area=default_area,
                 current_area=default_area,
-                status='WAITING'
+                status='WAITING',
+                radius=500  # Add default radius
             )
             
             # Add the creator as a player if they're authenticated
@@ -455,20 +456,25 @@ def update_game_area(request, game_id):
     try:
         game = Game.objects.get(id=game_id)
         
-        # Check if user is host
         if game.host != request.user:
             return Response(
                 {'error': 'Only the host can update the game area'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
             
-        # Get coordinates and radius from request
         lat = float(request.data.get('latitude'))
         lng = float(request.data.get('longitude'))
         radius = float(request.data.get('radius', 500))
         
+        # Store the original radius in meters
+        game.radius = radius
+        
+        # Convert radius from meters to degrees (approximately)
+        # 111000 meters = 1 degree at the equator
+        degree_radius = radius / 111000
+        
         center_point = Point(lng, lat)
-        game.start_area = center_point.buffer(radius/111000)
+        game.start_area = center_point.buffer(degree_radius)
         game.current_area = game.start_area
         game.area_set = True
         game.save()
