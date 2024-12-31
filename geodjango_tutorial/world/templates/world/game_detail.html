@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Game #{{ game.id }}</h1>
+    
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Game Status: {{ game.status }}</h5>
+            <p class="card-text">
+                Host: {{ game.host.username }}<br>
+                Created: {{ game.created_at|date:"F j, Y, P" }}<br>
+                Players: {{ game.players.count }}
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Players</h5>
+        </div>
+        <div class="card-body">
+            <div class="list-group">
+                {% for player in players %}
+                <div class="list-group-item">
+                    {{ player.user.username }}
+                    {% if player.user == game.selected_player %}
+                        <span class="badge bg-primary">Selected Player</span>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="list-group-item">No players have joined yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,36 @@
+.map-container {
+    height: calc(100% - 120px);
+    width: 100%;
+    position: relative;
+}
+
+.leaflet-container {
+    height: 100%;
+    width: 100%;
+}
+
+.controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    z-index: 1000;
+}
+
+.hint-image {
+    max-width: 100%;
+    height: auto;
+    margin: 10px 0;
+}
+
+.team-indicator {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 5px 10px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.9);
+    z-index: 1000;
+}

@@ -1,0 +1,9 @@
+.login-form {
+  padding: 16px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.login-form ion-item {
+  margin-bottom: 16px;
+} 

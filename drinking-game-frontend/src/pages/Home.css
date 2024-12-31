@@ -1,0 +1,15 @@
+.container {
+    padding: 20px;
+}
+
+.join-game {
+    margin-top: 20px;
+}
+
+.join-game input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}

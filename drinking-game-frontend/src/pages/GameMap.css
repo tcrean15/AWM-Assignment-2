@@ -1,0 +1,18 @@
+.map-container {
+    height: 100%;
+    width: 100%;
+}
+
+.leaflet-container {
+    height: 100%;
+    width: 100%;
+}
+
+.player-marker {
+    color: #2dd36f;
+}
+
+.player-popup {
+    text-align: center;
+    font-weight: bold;
+} 

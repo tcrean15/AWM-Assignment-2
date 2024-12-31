@@ -1,48 +1,59 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth import login, logout
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.http import JsonResponse
-from django.contrib.gis.geos import Point
-from django.contrib.auth.forms import UserCreationForm
-from .models import Profile, set_user_location, LocationNote, NoteComment
-from django.core.serializers import serialize
-from django.views.decorators.http import require_POST
-from django.shortcuts import get_object_or_404
-from django.conf import settings
-from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework import generics, status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import Game, GamePlayer, GameHint
+from .serializers import GameSerializer, GameHintSerializer
+from django.contrib.gis.geos import Polygon
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.views.generic import ListView, DetailView
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from django.contrib.auth import authenticate, login, logout
+from rest_framework.decorators import api_view, permission_classes
+from django.contrib.auth.models import User
+from django.middleware.csrf import get_token
+from rest_framework.authtoken.models import Token
 
-@login_required
 def index(request):
     """Main map view"""
-    try:
-        user_profile = Profile.objects.get(user=request.user)
-        location = user_profile.location
-    except Profile.DoesNotExist:
-        location = None
-    return render(request, 'world/map.html', {
-        'location': location,
-        'settings': settings
-    })
+    return render(request, 'world/index.html')
 
-@ensure_csrf_cookie
-def login_view(request):
-    if request.method == 'POST':
-        form = AuthenticationForm(request, data=request.POST)
-        if form.is_valid():
-            user = form.get_user()
-            login(request, user)
-            return redirect('index')
-    else:
-        form = AuthenticationForm()
-    return render(request, 'world/login.html', {'form': form})
+def get_notes(request):
+    notes = LocationNote.objects.all().select_related('user')
+    notes_data = []
+    
+    for note in notes:
+        note_data = {
+            'id': note.id,
+            'title': note.title,
+            'content': note.content,
+            'latitude': note.location.y,
+            'longitude': note.location.x,
+            'author': note.user.username,
+            'created_at': note.created_at.strftime('%Y-%m-%d %H:%M'),
+            'user': {
+                'id': note.user.id,
+                'username': note.user.username
+            },
+            'is_owner': note.user == request.user,
+            'comments': [{
+                'id': comment.id,
+                'content': comment.content,
+                'author': comment.user.username,
+                'created_at': comment.created_at.strftime('%Y-%m-%d %H:%M'),
+                'is_owner': comment.user == request.user
+            } for comment in note.comments.all()]
+        }
+        notes_data.append(note_data)
+    
+    return JsonResponse({'notes': notes_data})
 
-def logout_view(request):
-    logout(request)
-    return redirect('login')
-
-@csrf_protect
-@require_POST
 def update_location(request):
     if request.method == 'POST':
         try:
@@ -76,177 +87,366 @@ def update_location(request):
         'message': 'Invalid request method'
     }, status=405)
 
-def signup_view(request):
-    if request.method == 'POST':
-        form = UserCreationForm(request.POST)
-        if form.is_valid():
-            user = form.save()
-            # Create an empty profile for the user
-            Profile.objects.create(user=user)
-            login(request, user)
-            return redirect('index')
-    else:
-        form = UserCreationForm()
-    return render(request, 'world/signup.html', {'form': form})
+class GameListCreate(generics.ListCreateAPIView):
+    serializer_class = GameSerializer
+    permission_classes = [IsAuthenticated]
 
-@login_required
-def get_notes(request):
-    notes = LocationNote.objects.all().select_related('user')
-    notes_data = []
+    def get_queryset(self):
+        return Game.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        try:
+            # Create a default game area (Dublin area)
+            default_area = Polygon((
+                (53.3498, -6.2603),
+                (53.3498, -6.2403),
+                (53.3298, -6.2403),
+                (53.3298, -6.2603),
+                (53.3498, -6.2603)
+            ))
+            
+            # Create the game
+            game = Game.objects.create(
+                host=request.user,
+                start_area=default_area,
+                current_area=default_area,
+                status='WAITING'
+            )
+            
+            # Create a GamePlayer entry for the host
+            GamePlayer.objects.create(
+                game=game,
+                user=request.user,
+                team=0
+            )
+            
+            serializer = self.get_serializer(game)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            print(f"Error creating game: {str(e)}")
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class GameDetail(generics.RetrieveAPIView):
+    queryset = Game.objects.all()
+    serializer_class = GameSerializer
+    permission_classes = []  # Allow any access for testing
+
+class JoinGame(generics.GenericAPIView):
+    permission_classes = []  # Allow any access for testing
+
+    def post(self, request, pk):
+        try:
+            game = Game.objects.get(pk=pk)
+            player = GamePlayer.objects.create(
+                game=game,
+                team=game.players.count() % 2  # Alternate teams
+            )
+            return Response({
+                'status': 'joined',
+                'game': GameSerializer(game).data
+            })
+        except Game.DoesNotExist:
+            return Response(
+                {'error': 'Game not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class UpdateLocation(APIView):
+    def post(self, request, pk):
+        game = get_object_or_404(Game, pk=pk)
+        player = get_object_or_404(GamePlayer, game=game, user=request.user)
+        player.update_location(request.data['latitude'], request.data['longitude'])
+        return Response({'status': 'updated'}, status=status.HTTP_200_OK)
+
+class CreateHint(APIView):
+    def post(self, request, pk):
+        game = get_object_or_404(Game, pk=pk)
+        if game.selected_player != request.user:
+            return Response({'error': 'Only selected player can create hints'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        serializer = GameHintSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(game=game)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class SelectPlayer(APIView):
+    def post(self, request, pk):
+        game = get_object_or_404(Game, pk=pk)
+        if game.host != request.user:
+            return Response({'error': 'Only host can select player'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        player = get_object_or_404(GamePlayer, id=request.data['player_id'])
+        game.selected_player = player.user
+        game.save()
+        return Response({'status': 'selected'}, status=status.HTTP_200_OK)
+
+class StartGame(generics.GenericAPIView):
+    permission_classes = []
+
+    def post(self, request, pk):
+        try:
+            # Check if user is authenticated
+            if not request.user.is_authenticated:
+                return Response(
+                    {'error': 'You must be logged in to start a game'}, 
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            game = Game.objects.get(pk=pk)
+            
+            if not game.host:
+                return Response(
+                    {'error': 'Game has no host'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if user is host
+            if game.host.id != request.user.id:
+                return Response(
+                    {'error': 'Only the host can start the game'}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check minimum player count
+            if game.players.count() < 3:
+                return Response(
+                    {'error': 'Need at least 3 players to start'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Update game status
+            game.status = 'ACTIVE'
+            game.save()
+            
+            # Return updated game data
+            serializer = GameSerializer(game)
+            return Response(serializer.data)
+            
+        except Game.DoesNotExist:
+            return Response(
+                {'error': 'Game not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            print(f"Error starting game: {str(e)}")
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class CreateGame(generics.CreateAPIView):
+    serializer_class = GameSerializer
+    permission_classes = [AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        try:
+            # Create a default game area (Europe)
+            default_area = Polygon.from_bbox((-10.0, 35.0, 40.0, 70.0))
+            
+            # Create the game
+            game = Game.objects.create(
+                host=request.user if request.user.is_authenticated else None,
+                start_area=default_area,
+                current_area=default_area,
+                status='WAITING'
+            )
+            
+            # Add the creator as a player if they're authenticated
+            if request.user.is_authenticated:
+                GamePlayer.objects.create(
+                    game=game,
+                    user=request.user
+                )
+            
+            serializer = self.get_serializer(game)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class GameListView(ListView):
+    model = Game
+    template_name = 'world/game_list.html'
+    context_object_name = 'games'
+
+    def get_queryset(self):
+        return Game.objects.all().order_by('-created_at')
+
+class GameDetailView(DetailView):
+    model = Game
+    template_name = 'world/game_detail.html'
+    context_object_name = 'game'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['players'] = self.object.players.all()
+        return context
+
+class GameViewSet(viewsets.ModelViewSet):
+    queryset = Game.objects.all()
+    serializer_class = GameSerializer
     
-    for note in notes:
-        note_data = {
-            'id': note.id,
-            'title': note.title,
-            'content': note.content,
-            'latitude': note.location.y,
-            'longitude': note.location.x,
-            'author': note.user.username,
-            'created_at': note.created_at.strftime('%Y-%m-%d %H:%M'),
+    def create(self, request, *args, **kwargs):
+        try:
+            # Create a default game area (Europe)
+            default_area = Polygon.from_bbox((-10.0, 35.0, 40.0, 70.0))
+            
+            # Create the game
+            game = Game.objects.create(
+                host=request.user if request.user.is_authenticated else None,
+                start_area=default_area,
+                current_area=default_area,
+                status='WAITING'
+            )
+            
+            # Add the creator as a player if they're authenticated
+            if request.user.is_authenticated:
+                GamePlayer.objects.create(
+                    game=game,
+                    user=request.user
+                )
+            
+            serializer = self.get_serializer(game)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['post'])
+    def join(self, request, pk=None):
+        game = self.get_object()
+        if game.status != 'WAITING':
+            return Response(
+                {'error': 'Cannot join game in current state'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        GamePlayer.objects.create(
+            game=game,
+            user=request.user
+        )
+        return Response({'status': 'joined'}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def start(self, request, pk=None):
+        game = self.get_object()
+        if game.host != request.user:
+            return Response(
+                {'error': 'Only host can start the game'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if game.players.count() < 2:
+            return Response(
+                {'error': 'Need at least 2 players to start'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        game.status = 'active'
+        game.save()
+        return Response({'status': 'started'}, status=status.HTTP_200_OK)
+
+class GameHintViewSet(viewsets.ModelViewSet):
+    queryset = GameHint.objects.all()
+    serializer_class = GameHintSerializer
+    
+    def perform_create(self, serializer):
+        serializer.save(game_id=self.kwargs['game_pk'])
+
+@api_view(['POST'])
+def login_view(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    
+    user = authenticate(username=username, password=password)
+    
+    if user:
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
             'user': {
-                'id': note.user.id,
-                'username': note.user.username
-            },
-            'is_owner': note.user == request.user,
-            'comments': [{
-                'id': comment.id,
-                'content': comment.content,
-                'author': comment.user.username,
-                'created_at': comment.created_at.strftime('%Y-%m-%d %H:%M'),
-                'is_owner': comment.user == request.user
-            } for comment in note.comments.all()]
+                'id': user.id,
+                'username': user.username
+            }
+        })
+    return Response({
+        'error': 'Invalid credentials'
+    }, status=401)
+
+@api_view(['GET'])
+def get_csrf_token(request):
+    return JsonResponse({'csrfToken': get_token(request)})
+
+@api_view(['POST'])
+def logout_view(request):
+    logout(request)
+    return Response({'success': True})
+
+@api_view(['POST'])
+def register_view(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    
+    if User.objects.filter(username=username).exists():
+        return Response({'error': 'Username already exists'}, status=400)
+    
+    user = User.objects.create_user(username=username, password=password)
+    token, _ = Token.objects.get_or_create(user=user)
+    
+    return Response({
+        'token': token.key,
+        'user': {
+            'id': user.id,
+            'username': user.username
         }
-        notes_data.append(note_data)
-    
-    return JsonResponse({'notes': notes_data})
+    })
 
-@csrf_protect
-@require_POST
-def add_note(request):
+@api_view(['GET'])
+def current_user(request):
+    print("Current user session:", request.session.session_key)
+    print("Current user auth:", request.user.is_authenticated)
+    print("Current user:", request.user)
+    
+    if request.user.is_authenticated:
+        return Response({
+            'id': request.user.id,
+            'username': request.user.username
+        })
+    return Response({'error': 'Not authenticated'}, status=401)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def join_game(request, game_id):
     try:
-        latitude = float(request.POST.get('latitude'))
-        longitude = float(request.POST.get('longitude'))
-        title = request.POST.get('title')
-        content = request.POST.get('content')
+        game = Game.objects.get(id=game_id)
         
-        location = Point(longitude, latitude)
-        note = LocationNote.objects.create(
+        # Check if user is already in the game
+        if GamePlayer.objects.filter(game=game, user=request.user).exists():
+            return Response({'error': 'Already joined this game'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create new player entry
+        GamePlayer.objects.create(
+            game=game,
             user=request.user,
-            location=location,
-            title=title,
-            content=content
+            team=1  # You might want to implement team assignment logic
         )
         
-        return JsonResponse({
-            'success': True,
-            'note_id': note.id,
-            'message': 'Note added successfully'
-        })
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'message': str(e)
-        }, status=400)
-
-@login_required
-@require_POST
-def delete_note(request, note_id):
-    note = get_object_or_404(LocationNote, id=note_id)
-    if note.user != request.user:
-        return JsonResponse({
-            'success': False,
-            'message': 'Unauthorized'
-        }, status=403)
-    
-    note.delete()
-    return JsonResponse({
-        'success': True,
-        'message': 'Note deleted successfully'
-    })
-
-@csrf_protect
-@require_POST
-def add_comment(request, note_id):
-    note = get_object_or_404(LocationNote, id=note_id)
-    content = request.POST.get('content')
-    
-    comment = NoteComment.objects.create(
-        note=note,
-        user=request.user,
-        content=content
-    )
-    
-    return JsonResponse({
-        'success': True,
-        'comment_id': comment.id,
-        'message': 'Comment added successfully'
-    })
-
-@login_required
-@require_POST
-def delete_comment(request, comment_id):
-    comment = get_object_or_404(NoteComment, id=comment_id)
-    if comment.user != request.user:
-        return JsonResponse({
-            'success': False,
-            'message': 'Unauthorized'
-        }, status=403)
-    
-    comment.delete()
-    return JsonResponse({
-        'success': True,
-        'message': 'Comment deleted successfully'
-    })
-
-@login_required
-@require_POST
-def edit_note(request, note_id):
-    note = get_object_or_404(LocationNote, id=note_id)
-    if note.user != request.user:
-        return JsonResponse({
-            'success': False,
-            'message': 'Unauthorized'
-        }, status=403)
-    
-    try:
-        title = request.POST.get('title')
-        content = request.POST.get('content')
-        
-        note.title = title
-        note.content = content
-        note.save()
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Note updated successfully'
-        })
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'message': str(e)
-        }, status=400)
-
-@login_required
-@require_POST
-def set_location(request):
-    try:
-        latitude = float(request.POST.get('latitude'))
-        longitude = float(request.POST.get('longitude'))
-        accuracy = float(request.POST.get('accuracy', 0))
-        
-        profile = set_user_location(
-            request.user.id,
-            latitude,
-            longitude,
-            accuracy
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Location updated successfully'
-        })
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'message': str(e)
-        }, status=400)
+        return Response({'success': True})
+    except Game.DoesNotExist:
+        return Response({'error': 'Game not found'}, status=status.HTTP_404_NOT_FOUND)

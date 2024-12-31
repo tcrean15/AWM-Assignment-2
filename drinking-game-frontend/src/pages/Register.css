@@ -1,0 +1,19 @@
+.register-form {
+  padding: 16px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.register-form ion-item {
+  margin-bottom: 16px;
+}
+
+.register-form ion-button {
+  margin-top: 24px;
+}
+
+.error-message {
+  color: var(--ion-color-danger);
+  padding: 10px;
+  text-align: center;
+} 

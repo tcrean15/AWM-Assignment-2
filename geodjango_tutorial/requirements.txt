@@ -1,0 +1,15 @@
+Django
+psycopg2-binary
+django-crispy-forms
+django-leaflet
+python-dotenv
+gunicorn
+djangorestframework
+django-filter
+markdown
+channels
+channels-redis
+django-cors-headers
+pillow
+django-storages
+whitenoise 

@@ -2,6 +2,7 @@ from django.contrib.gis.db import models
 
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
+from django.utils import timezone
 
 class WorldBorder(models.Model):
 
@@ -108,3 +109,71 @@ class NoteComment(models.Model):
 
     def __str__(self):
         return f"Comment by {self.user.username} on {self.note.title}"
+
+class Game(models.Model):
+    STATUS_CHOICES = [
+        ('WAITING', 'Waiting for players'),
+        ('ACTIVE', 'Game in progress'),
+        ('FINISHED', 'Game finished'),
+    ]
+    
+    host = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='hosted_games',
+        null=True  # Keep this nullable for now
+    )
+    status = models.CharField(
+        max_length=20, 
+        choices=STATUS_CHOICES, 
+        default='WAITING'
+    )
+    start_area = models.PolygonField()
+    current_area = models.PolygonField()
+    selected_player = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        related_name='selected_in_games'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def can_start(self):
+        return (
+            self.status == 'WAITING' and 
+            self.players.count() >= 3
+        )
+
+    def start_game(self, selected_player=None):
+        if not self.can_start():
+            raise ValueError("Game cannot be started")
+        
+        self.status = 'ACTIVE'
+        if selected_player:
+            self.selected_player = selected_player
+        self.save()
+
+    def __str__(self):
+        return f"Game {self.id} ({self.status})"
+
+class GamePlayer(models.Model):
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='players')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, related_name='game_players')
+    team = models.IntegerField(default=0)
+    location = models.PointField(null=True)
+    last_location_update = models.DateTimeField(null=True)
+    
+    class Meta:
+        unique_together = ['game', 'user']
+
+    def __str__(self):
+        return f"{self.user.username} in game {self.game.id}"
+
+class GameHint(models.Model):
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='hints')
+    content = models.TextField()
+    image = models.ImageField(upload_to='game_hints/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Hint for game {self.game.id} at {self.created_at}"

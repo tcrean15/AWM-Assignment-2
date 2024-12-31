@@ -7,6 +7,7 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - static_volume:/app/staticfiles
+      - media_volume:/app/media
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
     depends_on:
@@ -14,6 +15,11 @@ services:
     networks:
       - awm2024
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  redis:
+    image: redis:6-alpine
+    networks:
+      - awm2024
 
   certbot:
     image: certbot/certbot
@@ -47,7 +53,6 @@ services:
     restart: always
 
   awm_django_app:
-    #image: tcrean15/geodjango_app:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -56,6 +61,8 @@ services:
     depends_on:
       postgis:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       - DJANGO_SETTINGS_MODULE=geodjango_tutorial.settings
       - SECRET_KEY=${SECRET_KEY}
@@ -66,10 +73,12 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_HOST=postgis
       - DB_PORT=5432
+      - REDIS_HOST=redis
     networks:
       - awm2024
     volumes:
       - static_volume:/app/staticfiles
+      - media_volume:/app/media
     restart: always
 
 
@@ -81,3 +90,4 @@ networks:
 volumes:
   postgres_data:
   static_volume:
+  media_volume:

@@ -7,19 +7,28 @@ ENV DJANGO_SETTINGS_MODULE=geodjango_tutorial.settings
 
 WORKDIR /app
 
-# Install curl and postgresql-client for healthcheck
-RUN apt-get update && apt-get install -y curl postgresql-client
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    postgresql-client \
+    redis-server
 
-# Create the environment:
+# Create the environment
 COPY ENV.yml .
 RUN conda env create -f ENV.yml
 
-# Add these lines to install pip packages
-RUN pip install python-dotenv
-RUN /opt/conda/envs/awm_env/bin/pip install django-crispy-forms django-leaflet
+# Install additional Python packages
+RUN /opt/conda/envs/awm_env/bin/pip install \
+    channels \
+    channels-redis \
+    django-cors-headers \
+    pillow \
+    python-dotenv \
+    django-crispy-forms \
+    django-leaflet
 
 # Create necessary directories
-RUN mkdir -p /app/static /app/staticfiles
+RUN mkdir -p /app/static /app/staticfiles /app/media
 
 # Copy the application code
 COPY . /app/
@@ -36,7 +45,6 @@ ENV DJANGO_SUPERUSER_PASSWORD=admin123
 
 EXPOSE 8001
 
-# Add this before the CMD line
 ENV PYTHONPATH=/app:${PYTHONPATH}
 
 CMD ["/app/entrypoint.sh"]

@@ -1,0 +1,31 @@
+.lobby-container {
+    padding: 1rem;
+}
+
+.player-list {
+    margin: 1rem 0;
+}
+
+.player-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    border-bottom: 1px solid #ccc;
+}
+
+.host-controls {
+    margin-top: 2rem;
+}
+
+.waiting-message {
+    text-align: center;
+    color: #666;
+    margin: 1rem 0;
+}
+
+.game-code {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin: 1rem 0;
+} 
