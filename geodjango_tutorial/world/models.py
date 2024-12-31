@@ -137,6 +137,7 @@ class Game(models.Model):
         related_name='selected_in_games'
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    area_set = models.BooleanField(default=False)
 
     def can_start(self):
         return (

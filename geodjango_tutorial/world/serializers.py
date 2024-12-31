@@ -25,7 +25,14 @@ class GameSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Game
-        fields = ['id', 'host', 'status', 'players', 'created_at']
+        fields = [
+            'id', 
+            'host', 
+            'status', 
+            'players', 
+            'created_at',
+            'area_set'
+        ]
 
     def get_players(self, obj):
         players = GamePlayer.objects.filter(game=obj)

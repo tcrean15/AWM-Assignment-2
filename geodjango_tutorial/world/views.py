@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from .models import Game, GamePlayer, GameHint
 from .serializers import GameSerializer, GameHintSerializer
-from django.contrib.gis.geos import Polygon
+from django.contrib.gis.geos import Polygon, Point
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.generic import ListView, DetailView
 from rest_framework import viewsets
@@ -193,68 +193,29 @@ class SelectPlayer(APIView):
         game.save()
         return Response({'status': 'selected'}, status=status.HTTP_200_OK)
 
-class StartGame(generics.GenericAPIView):
-    permission_classes = []  # Allow any access for testing
+class StartGame(APIView):
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         try:
             game = Game.objects.get(pk=pk)
             
             # Check if user is host
-            if request.user != game.host:
-                return Response(
-                    {'error': 'Only the host can start the game'}, 
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            # Check minimum players
-            if game.players.count() < 3:
-                return Response(
-                    {'error': 'Need at least 3 players to start'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # Randomly assign teams
-            players = list(game.players.all())
-            random.shuffle(players)
-            team_size = len(players) // 2
+            if game.host != request.user:
+                return Response({'error': 'Only the host can start the game'}, status=403)
             
-            # Assign team 1
-            for player in players[:team_size]:
-                player.team = 1
-                player.save()
+            # Check if area has been set
+            if not game.area_set:
+                return Response({'error': 'Game area must be set before starting'}, status=400)
             
-            # Assign team 2
-            for player in players[team_size:]:
-                player.team = 2
-                player.save()
-
-            # Update game status
+            # Rest of your existing start game logic...
             game.status = 'ACTIVE'
             game.save()
 
-            # Notify all players via WebSocket
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                f'game_{game.id}',
-                {
-                    'type': 'game_update',
-                    'data': GameSerializer(game).data
-                }
-            )
-
-            return Response(GameSerializer(game).data)
+            return Response({'message': 'Game started successfully'})
 
         except Game.DoesNotExist:
-            return Response(
-                {'error': 'Game not found'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {'error': str(e)}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return Response({'error': 'Game not found'}, status=404)
 
 class CreateGame(generics.CreateAPIView):
     serializer_class = GameSerializer
@@ -462,3 +423,63 @@ def join_game(request, game_id):
         return Response({'success': True})
     except Game.DoesNotExist:
         return Response({'error': 'Game not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def end_game(request, game_id):
+    try:
+        game = Game.objects.get(id=game_id)
+        
+        # Check if user is host
+        if game.host != request.user:
+            return Response(
+                {'error': 'Only the host can end the game'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # Update game status or delete game
+        game.status = 'FINISHED'  # Or you could delete the game with game.delete()
+        game.save()
+        
+        return Response({'message': 'Game ended successfully'})
+        
+    except Game.DoesNotExist:
+        return Response(
+            {'error': 'Game not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_game_area(request, game_id):
+    try:
+        game = Game.objects.get(id=game_id)
+        
+        # Check if user is host
+        if game.host != request.user:
+            return Response(
+                {'error': 'Only the host can update the game area'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        # Get coordinates and radius from request
+        lat = float(request.data.get('latitude'))
+        lng = float(request.data.get('longitude'))
+        radius = float(request.data.get('radius', 500))
+        
+        center_point = Point(lng, lat)
+        game.start_area = center_point.buffer(radius/111000)
+        game.current_area = game.start_area
+        game.area_set = True
+        game.save()
+        
+        return Response({
+            'message': 'Game area updated successfully',
+            'center': {'lat': lat, 'lng': lng},
+            'radius': radius
+        })
+        
+    except Game.DoesNotExist:
+        return Response({'error': 'Game not found'}, status=404)
+    except (ValueError, KeyError) as e:
+        return Response({'error': f'Invalid data: {str(e)}'}, status=400)
