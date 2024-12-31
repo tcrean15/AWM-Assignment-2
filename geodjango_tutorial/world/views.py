@@ -207,15 +207,26 @@ class StartGame(APIView):
             # Check if area has been set
             if not game.area_set:
                 return Response({'error': 'Game area must be set before starting'}, status=400)
+
+            # Check minimum players
+            if game.players.count() < 3:
+                return Response({'error': 'Need at least 3 players to start'}, status=400)
             
-            # Rest of your existing start game logic...
+            # Assign teams and hunted player
+            game.assign_teams_and_hunted()
+            
+            # Update game status
             game.status = 'ACTIVE'
             game.save()
 
-            return Response({'message': 'Game started successfully'})
+            # Return updated game data
+            serializer = GameSerializer(game)
+            return Response(serializer.data)
 
         except Game.DoesNotExist:
             return Response({'error': 'Game not found'}, status=404)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=400)
 
 class CreateGame(generics.CreateAPIView):
     serializer_class = GameSerializer
@@ -469,19 +480,26 @@ def update_game_area(request, game_id):
         # Store the original radius in meters
         game.radius = radius
         
-        # Convert radius from meters to degrees (approximately)
-        # 111000 meters = 1 degree at the equator
+        # Create center point (longitude, latitude order for PostGIS)
+        center_point = Point(lng, lat, srid=4326)
+        
+        # Debug logging
+        print(f"Creating game area with center: lat={lat}, lng={lng}")
+        print(f"Radius: {radius} meters")
+        
+        # Convert radius from meters to degrees
         degree_radius = radius / 111000
         
-        center_point = Point(lng, lat)
+        # Create the circular buffer
         game.start_area = center_point.buffer(degree_radius)
         game.current_area = game.start_area
         game.area_set = True
         game.save()
         
+        # Return the center point and radius in the response
         return Response({
             'message': 'Game area updated successfully',
-            'center': {'lat': lat, 'lng': lng},
+            'center': [lat, lng],  # Return as [latitude, longitude]
             'radius': radius
         })
         

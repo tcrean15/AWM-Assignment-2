@@ -117,42 +117,60 @@ class Game(models.Model):
         ('FINISHED', 'Game finished'),
     ]
     
-    host = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='hosted_games',
-        null=True  # Keep this nullable for now
-    )
-    status = models.CharField(
-        max_length=20, 
-        choices=STATUS_CHOICES, 
-        default='WAITING'
-    )
+    host = models.ForeignKey(User, on_delete=models.CASCADE, related_name='hosted_games', null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='WAITING')
     start_area = models.PolygonField()
     current_area = models.PolygonField()
-    selected_player = models.ForeignKey(
-        User, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        related_name='selected_in_games'
-    )
+    selected_player = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='selected_in_games')
+    hunted_player = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='hunted_in_games')
     created_at = models.DateTimeField(auto_now_add=True)
     area_set = models.BooleanField(default=False)
-    radius = models.FloatField(default=500)  # Store the radius in meters
+    radius = models.FloatField(default=500)
 
-    def can_start(self):
-        return (
-            self.status == 'WAITING' and 
-            self.players.count() >= 3
-        )
+    def assign_teams_and_hunted(self):
+        """Randomly assign teams and select a hunted player"""
+        players = list(self.players.all())
+        if len(players) < 3:
+            raise ValueError("Need at least 3 players")
 
-    def start_game(self, selected_player=None):
-        if not self.can_start():
-            raise ValueError("Game cannot be started")
-        
-        self.status = 'ACTIVE'
-        if selected_player:
-            self.selected_player = selected_player
+        # Randomly select hunted player
+        import random
+        hunted = random.choice(players)
+        self.hunted_player = hunted.user
+        hunted.team = 0  # Team 0 for hunted
+        hunted.save()
+
+        # Remove hunted from players list
+        remaining_players = [p for p in players if p != hunted]
+        random.shuffle(remaining_players)
+
+        # Calculate number of teams based on remaining players
+        num_players = len(remaining_players)
+        if num_players <= 4:
+            num_teams = 2  # 2 teams for 3-5 total players
+        else:
+            num_teams = 3  # 3 teams for 6+ total players
+
+        # Distribute players across teams
+        players_per_team = num_players // num_teams
+        extra_players = num_players % num_teams
+
+        current_index = 0
+        for team_num in range(1, num_teams + 1):
+            # Calculate how many players this team should get
+            team_size = players_per_team
+            if extra_players > 0:
+                team_size += 1
+                extra_players -= 1
+
+            # Assign players to this team
+            team_players = remaining_players[current_index:current_index + team_size]
+            for player in team_players:
+                player.team = team_num
+                player.save()
+            
+            current_index += team_size
+
         self.save()
 
     def __str__(self):
