@@ -19,6 +19,9 @@ from rest_framework.decorators import api_view, permission_classes
 from django.contrib.auth.models import User
 from django.middleware.csrf import get_token
 from rest_framework.authtoken.models import Token
+import random
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 def index(request):
     """Main map view"""
@@ -191,54 +194,63 @@ class SelectPlayer(APIView):
         return Response({'status': 'selected'}, status=status.HTTP_200_OK)
 
 class StartGame(generics.GenericAPIView):
-    permission_classes = []
+    permission_classes = []  # Allow any access for testing
 
     def post(self, request, pk):
         try:
-            # Check if user is authenticated
-            if not request.user.is_authenticated:
-                return Response(
-                    {'error': 'You must be logged in to start a game'}, 
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
-
             game = Game.objects.get(pk=pk)
             
-            if not game.host:
-                return Response(
-                    {'error': 'Game has no host'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
             # Check if user is host
-            if game.host.id != request.user.id:
+            if request.user != game.host:
                 return Response(
                     {'error': 'Only the host can start the game'}, 
                     status=status.HTTP_403_FORBIDDEN
                 )
-            
-            # Check minimum player count
+
+            # Check minimum players
             if game.players.count() < 3:
                 return Response(
                     {'error': 'Need at least 3 players to start'}, 
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
+            # Randomly assign teams
+            players = list(game.players.all())
+            random.shuffle(players)
+            team_size = len(players) // 2
             
+            # Assign team 1
+            for player in players[:team_size]:
+                player.team = 1
+                player.save()
+            
+            # Assign team 2
+            for player in players[team_size:]:
+                player.team = 2
+                player.save()
+
             # Update game status
             game.status = 'ACTIVE'
             game.save()
-            
-            # Return updated game data
-            serializer = GameSerializer(game)
-            return Response(serializer.data)
-            
+
+            # Notify all players via WebSocket
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'game_{game.id}',
+                {
+                    'type': 'game_update',
+                    'data': GameSerializer(game).data
+                }
+            )
+
+            return Response(GameSerializer(game).data)
+
         except Game.DoesNotExist:
             return Response(
                 {'error': 'Game not found'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
-            print(f"Error starting game: {str(e)}")
             return Response(
                 {'error': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

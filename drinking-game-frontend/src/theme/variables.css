@@ -1,2 +1,20 @@
 /* For information on how to create your own theme, please see:
 http://ionicframework.com/docs/theming/ */
+
+/* Add these team color variables */
+:root {
+  --team-1-color: #3880ff;
+  --team-2-color: #eb445a;
+}
+
+.team-1 {
+  color: var(--team-1-color);
+  font-weight: bold;
+  margin-left: 8px;
+}
+
+.team-2 {
+  color: var(--team-2-color);
+  font-weight: bold;
+  margin-left: 8px;
+}

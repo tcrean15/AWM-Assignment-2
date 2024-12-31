@@ -93,17 +93,39 @@ export class ApiService {
         }
     }
 
-    static async startGame(gameId: number) {
-        try {
-            const response = await axiosInstance.post(`/games/${gameId}/start/`);
-            return response.data;
-        } catch (error: any) {
-            throw new Error(error.response?.data?.error || 'Failed to start game');
-        }
-    }
-
     static logout() {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+    }
+
+    static async startGame(gameId: number) {
+        try {
+            console.log(`Starting game ${gameId} with token:`, localStorage.getItem('token'));
+            const response = await axiosInstance.post(`/games/${gameId}/start/`);
+            console.log('Start game response:', response.data);
+            return response.data;
+        } catch (error: any) {
+            console.error('Start game error details:', {
+                response: error.response?.data,
+                status: error.response?.status,
+                headers: error.response?.headers,
+                config: error.config
+            });
+            throw new Error(error.response?.data?.message || error.response?.data?.error || 'Failed to start game');
+        }
+    }
+
+    static async testAuth() {
+        try {
+            const token = localStorage.getItem('token');
+            console.log('Testing auth with token:', token);
+            
+            const response = await axiosInstance.get('/current-user/');
+            console.log('Auth test response:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('Auth test failed:', error);
+            throw error;
+        }
     }
 }
