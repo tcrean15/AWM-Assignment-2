@@ -22,6 +22,7 @@ from rest_framework.authtoken.models import Token
 import random
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from rest_framework.authentication import TokenAuthentication
 
 def index(request):
     """Main map view"""
@@ -136,21 +137,50 @@ class GameListCreate(generics.ListCreateAPIView):
 class GameDetail(generics.RetrieveAPIView):
     queryset = Game.objects.all()
     serializer_class = GameSerializer
-    permission_classes = []  # Allow any access for testing
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        print(f"User making request: {self.request.user}")
+        return Game.objects.all()
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        print("Game data being sent:", serializer.data)  # Debug log
+        return Response(serializer.data)
 
 class JoinGame(generics.GenericAPIView):
-    permission_classes = []  # Allow any access for testing
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
 
     def post(self, request, pk):
         try:
             game = Game.objects.get(pk=pk)
+            print(f"User {request.user.username} attempting to join game {pk}")  # Debug log
+            
+            # Check if user is already in the game
+            if GamePlayer.objects.filter(game=game, user=request.user).exists():
+                return Response(
+                    {'error': 'User already in game'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Create new player with the authenticated user
             player = GamePlayer.objects.create(
                 game=game,
-                team=game.players.count() % 2  # Alternate teams
+                user=request.user,
+                team=game.players.count() % 2 + 1  # Teams are 1 or 2
             )
+            print(f"Created player: {player}")  # Debug log
+            
+            # Get updated game data
+            game.refresh_from_db()
+            serializer = GameSerializer(game)
+            
             return Response({
                 'status': 'joined',
-                'game': GameSerializer(game).data
+                'game': serializer.data
             })
         except Game.DoesNotExist:
             return Response(
@@ -158,6 +188,7 @@ class JoinGame(generics.GenericAPIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
+            print(f"Error joining game: {str(e)}")  # Debug log
             return Response(
                 {'error': str(e)}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -357,24 +388,37 @@ class GameHintViewSet(viewsets.ModelViewSet):
         serializer.save(game_id=self.kwargs['game_pk'])
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def login_view(request):
+    print("Login attempt with data:", request.data)  # Debug log
+    
     username = request.data.get('username')
     password = request.data.get('password')
     
-    user = authenticate(username=username, password=password)
-    
-    if user:
-        token, _ = Token.objects.get_or_create(user=user)
+    if not username or not password:
         return Response({
-            'token': token.key,
-            'user': {
-                'id': user.id,
-                'username': user.username
-            }
-        })
+            'error': 'Please provide both username and password'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    user = authenticate(username=username, password=password)
+    print("Authenticated user:", user)  # Debug log
+    
+    if not user:
+        return Response({
+            'error': 'Invalid credentials'
+        }, status=status.HTTP_401_UNAUTHORIZED)
+    
+    # Get or create token
+    token, _ = Token.objects.get_or_create(user=user)
+    print("Generated token:", token.key)  # Debug log
+    
     return Response({
-        'error': 'Invalid credentials'
-    }, status=401)
+        'token': token.key,
+        'user': {
+            'id': user.id,
+            'username': user.username
+        }
+    })
 
 @api_view(['GET'])
 def get_csrf_token(request):
@@ -386,23 +430,40 @@ def logout_view(request):
     return Response({'success': True})
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def register_view(request):
+    print("Registration attempt with data:", request.data)  # Debug log
+    
     username = request.data.get('username')
     password = request.data.get('password')
     
+    if not username or not password:
+        return Response({
+            'error': 'Please provide both username and password'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
     if User.objects.filter(username=username).exists():
-        return Response({'error': 'Username already exists'}, status=400)
+        return Response({
+            'error': 'Username already exists'
+        }, status=status.HTTP_400_BAD_REQUEST)
     
-    user = User.objects.create_user(username=username, password=password)
-    token, _ = Token.objects.get_or_create(user=user)
-    
-    return Response({
-        'token': token.key,
-        'user': {
-            'id': user.id,
-            'username': user.username
-        }
-    })
+    try:
+        user = User.objects.create_user(username=username, password=password)
+        token, _ = Token.objects.get_or_create(user=user)
+        print(f"Created user {username} with token {token.key}")  # Debug log
+        
+        return Response({
+            'token': token.key,
+            'user': {
+                'id': user.id,
+                'username': user.username
+            }
+        })
+    except Exception as e:
+        print(f"Registration error: {str(e)}")  # Debug log
+        return Response({
+            'error': 'Registration failed'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 def current_user(request):
@@ -443,25 +504,13 @@ def join_game(request, game_id):
 def end_game(request, game_id):
     try:
         game = Game.objects.get(id=game_id)
-        
-        # Check if user is host
-        if game.host != request.user:
-            return Response(
-                {'error': 'Only the host can end the game'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-            
-        # Update game status or delete game
-        game.status = 'FINISHED'  # Or you could delete the game with game.delete()
-        game.save()
-        
-        return Response({'message': 'Game ended successfully'})
-        
+        if request.user == game.host:
+            game.status = 'FINISHED'
+            game.save()
+            return Response({'status': 'Game ended successfully'})
+        return Response({'error': 'Only the host can end the game'}, status=status.HTTP_403_FORBIDDEN)
     except Game.DoesNotExist:
-        return Response(
-            {'error': 'Game not found'}, 
-            status=status.HTTP_404_NOT_FOUND
-        )
+        return Response({'error': 'Game not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])

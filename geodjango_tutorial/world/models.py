@@ -177,17 +177,17 @@ class Game(models.Model):
         return f"Game {self.id} ({self.status})"
 
 class GamePlayer(models.Model):
-    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='players')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, related_name='game_players')
-    team = models.IntegerField(default=0)
-    location = models.PointField(null=True)
-    last_location_update = models.DateTimeField(null=True)
-    
+    game = models.ForeignKey(Game, related_name='players', on_delete=models.CASCADE)
+    user = models.ForeignKey(User, related_name='game_players', on_delete=models.CASCADE)
+    team = models.IntegerField(choices=[(1, 'Hunted'), (2, 'Hunters')], default=1)
+    location = models.PointField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
     class Meta:
-        unique_together = ['game', 'user']
+        unique_together = ('game', 'user')
 
     def __str__(self):
-        return f"{self.user.username} in game {self.game.id}"
+        return f"{self.user.username} in {self.game}"
 
 class GameHint(models.Model):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='hints')
