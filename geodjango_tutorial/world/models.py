@@ -129,27 +129,35 @@ class Game(models.Model):
 
     def assign_teams_and_hunted(self):
         """Randomly assign teams and select a hunted player"""
+        print("Starting team assignment...")  # Debug print
         players = list(self.players.all())
         if len(players) < 3:
             raise ValueError("Need at least 3 players")
 
+        # Reset all players' teams first
+        for player in players:
+            player.team = 1  # Default to Hunters Team 1
+            player.save()
+
         # Randomly select hunted player
         import random
         hunted = random.choice(players)
-        self.hunted_player = hunted.user
         hunted.team = 0  # Team 0 for hunted
         hunted.save()
+        print(f"Selected {hunted.user.username} as hunted")  # Debug print
 
-        # Remove hunted from players list
+        # Remove hunted from players list and shuffle remaining players
         remaining_players = [p for p in players if p != hunted]
         random.shuffle(remaining_players)
 
-        # Calculate number of teams based on remaining players
+        # Calculate number of hunter teams based on remaining players
         num_players = len(remaining_players)
         if num_players <= 4:
             num_teams = 2  # 2 teams for 3-5 total players
         else:
             num_teams = 3  # 3 teams for 6+ total players
+
+        print(f"Creating {num_teams} hunter teams")  # Debug print
 
         # Distribute players across teams
         players_per_team = num_players // num_teams
@@ -168,26 +176,38 @@ class Game(models.Model):
             for player in team_players:
                 player.team = team_num
                 player.save()
+                print(f"Assigned {player.user.username} to team {team_num}")  # Debug print
             
             current_index += team_size
 
         self.save()
+        print("Team assignment complete")  # Debug print
 
     def __str__(self):
         return f"Game {self.id} ({self.status})"
 
 class GamePlayer(models.Model):
+    TEAM_CHOICES = [
+        (0, 'Hunted'),
+        (1, 'Hunters Team 1'),
+        (2, 'Hunters Team 2'),
+        (3, 'Hunters Team 3'),
+    ]
+    
     game = models.ForeignKey(Game, related_name='players', on_delete=models.CASCADE)
     user = models.ForeignKey(User, related_name='game_players', on_delete=models.CASCADE)
-    team = models.IntegerField(choices=[(1, 'Hunted'), (2, 'Hunters')], default=1)
+    team = models.IntegerField(choices=TEAM_CHOICES, default=1)
     location = models.PointField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         unique_together = ('game', 'user')
 
+    def get_team_display(self):
+        return dict(self.TEAM_CHOICES).get(self.team, 'Unknown Team')
+
     def __str__(self):
-        return f"{self.user.username} in {self.game}"
+        return f"{self.user.username} in {self.game} - {self.get_team_display()}"
 
 class GameHint(models.Model):
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='hints')

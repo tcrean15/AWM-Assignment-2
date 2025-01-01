@@ -245,8 +245,12 @@ class StartGame(APIView):
                 return Response({'error': 'Game area must be set before starting'}, status=400)
 
             # Check minimum players
-            if game.players.count() < 2:  # Changed from 3 to 2 for testing
-                return Response({'error': 'Need at least 2 players to start'}, status=400)
+            if game.players.count() < 3:  # Changed back to 3 players minimum
+                return Response({'error': 'Need at least 3 players to start'}, status=400)
+            
+            # Assign teams first, then update status
+            print("Calling assign_teams_and_hunted()")  # Debug print
+            game.assign_teams_and_hunted()
             
             # Update game status
             game.status = 'ACTIVE'
@@ -591,4 +595,38 @@ def set_game_area(request, game_id):
         return Response({'error': 'Game not found'}, status=404)
     except Exception as e:
         print(f"Error setting game area: {str(e)}")
+        return Response({'error': str(e)}, status=400)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def start_game(request, game_id):
+    try:
+        game = Game.objects.get(id=game_id)
+        
+        # Check if user is host
+        if game.host != request.user:
+            return Response({'error': 'Only the host can start the game'}, status=403)
+        
+        # Check if game can be started
+        if game.status != 'WAITING':
+            return Response({'error': 'Game cannot be started'}, status=400)
+            
+        if not game.area_set:
+            return Response({'error': 'Game area must be set before starting'}, status=400)
+            
+        if game.players.count() < 3:
+            return Response({'error': 'Need at least 3 players to start'}, status=400)
+
+        # Assign teams and start game
+        print("Assigning teams for game", game_id)  # Debug print
+        game.assign_teams_and_hunted()
+        game.status = 'ACTIVE'
+        game.save()
+        
+        return Response(GameSerializer(game).data)
+        
+    except Game.DoesNotExist:
+        return Response({'error': 'Game not found'}, status=404)
+    except Exception as e:
+        print(f"Error starting game: {str(e)}")  # Debug print
         return Response({'error': str(e)}, status=400)
