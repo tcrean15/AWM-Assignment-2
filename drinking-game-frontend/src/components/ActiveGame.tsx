@@ -1,90 +1,136 @@
 import React, { useEffect, useState } from 'react';
-import { IonContent, IonFab, IonFabButton, IonIcon } from '@ionic/react';
-import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
+import { IonContent, IonButton } from '@ionic/react';
+import { MapContainer, TileLayer, Circle, Marker } from 'react-leaflet';
 import { Geolocation } from '@capacitor/geolocation';
-import { camera } from 'ionicons/icons';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import './ActiveGame.css';
 
-// Fix for default markers
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
-
-interface ActiveGameProps {
-    game: any;
-    currentUser: any;
+// Define interfaces first
+interface Player {
+    id?: number;
+    user?: {
+        id: number;
+        username: string;
+    } | null;
+    username?: string;
+    team: number;
+    location?: [number, number];
 }
 
-// Component to handle map updates
-const MapController: React.FC<{ center: [number, number] }> = ({ center }) => {
-    const map = useMap();
-    
-    useEffect(() => {
-        map.setView(center, map.getZoom());
-    }, [center, map]);
-    
-    return null;
-};
+interface GameData {
+    id: number;
+    host: {
+        id: number;
+        username: string;
+    };
+    players: Player[];
+    current_area: string;
+    radius: number;
+    status: string;
+    hunted_team: number;
+}
+
+interface ActiveGameProps {
+    game: GameData;
+    currentUser: {
+        id: number;
+        username: string;
+    };
+}
 
 const ActiveGame: React.FC<ActiveGameProps> = ({ game, currentUser }) => {
-    const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+    // Move debug logging here
+    console.log('Full game data:', {
+        game,
+        host: game.host,
+        players: game.players,
+        currentUser
+    });
+
+    const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [mapLoaded, setMapLoaded] = useState(false);
+
+    // Parse the polygon coordinates from the SRID string
+    const parsePolygonCoordinates = (polygonStr: string | undefined): [number, number] => {
+        if (!polygonStr) return [53.3498, -6.2603];
+
+        try {
+            console.log('Parsing polygon string:', polygonStr);
+            const cleanStr = polygonStr.replace('SRID=4326;', '');
+            const matches = cleanStr.match(/POLYGON \(\((.*?)\)\)/);
+            
+            if (matches && matches[1]) {
+                // Get first coordinate pair
+                const firstCoordPair = matches[1].split(',')[0].trim();
+                const [lon, lat] = firstCoordPair.split(' ').map(Number);
+                
+                // Create center point
+                const center: [number, number] = [lat, lon];
+                console.log('Parsed center coordinates:', center);
+                return center;
+            }
+        } catch (error) {
+            console.error('Error parsing coordinates:', error);
+        }
+        
+        return [53.3498, -6.2603];
+    };
+
+    const defaultCenter: [number, number] = [53.3498, -6.2603];
+    const center: [number, number] = game.current_area ? 
+        parsePolygonCoordinates(game.current_area) : 
+        defaultCenter;
+
+    console.log('Game data:', game);
+    console.log('Current area:', game.current_area);
+    console.log('Center coordinates:', center);
+
+    const containerStyle = {
+        height: '100vh',
+        width: '100%',
+        position: 'relative' as const
+    };
 
     useEffect(() => {
-        const getCurrentPosition = async () => {
-            try {
-                const coordinates = await Geolocation.getCurrentPosition({
-                    enableHighAccuracy: true
-                });
-                const position: [number, number] = [
-                    coordinates.coords.latitude,
-                    coordinates.coords.longitude
-                ];
-                setUserLocation(position);
-                setMapLoaded(true);
-            } catch (error) {
-                console.error("Error getting location:", error);
-                setError('Error getting location');
-            }
-        };
-
-        getCurrentPosition();
-
-        // Start watching player location
         let watchId: string;
-        
-        const watchPosition = async () => {
+
+        const startWatchingPosition = async () => {
             try {
-                watchId = await Geolocation.watchPosition({
+                // First get initial position
+                const initialPosition = await Geolocation.getCurrentPosition({
                     enableHighAccuracy: true,
-                    timeout: 1000,
-                    maximumAge: 3000,
-                }, (position) => {
-                    if (position) {
-                        const newLocation: [number, number] = [
-                            position.coords.latitude,
-                            position.coords.longitude
-                        ];
-                        setUserLocation(newLocation);
-                    }
+                    timeout: 30000
                 });
-            } catch (error) {
-                setError('Error watching location');
-                console.error(error);
+
+                setCurrentLocation([
+                    initialPosition.coords.latitude,
+                    initialPosition.coords.longitude
+                ]);
+
+                // Then start watching
+                watchId = await Geolocation.watchPosition(
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 30000
+                    },
+                    (position) => {
+                        if (position) {
+                            setCurrentLocation([
+                                position.coords.latitude,
+                                position.coords.longitude
+                            ]);
+                            setError(null);
+                        }
+                    }
+                );
+            } catch (error: any) {
+                console.error('Error getting location:', error);
+                setError(`Location error: ${error.message}`);
             }
         };
 
-        watchPosition();
+        startWatchingPosition();
 
         return () => {
             if (watchId) {
@@ -93,81 +139,139 @@ const ActiveGame: React.FC<ActiveGameProps> = ({ game, currentUser }) => {
         };
     }, []);
 
-    const createTeamIcon = (team: string) => {
-        return L.divIcon({
-            className: `team-marker team-${team}`,
-            html: `<div style="background-color: ${team === 'red' ? '#ff4444' : '#4444ff'}; 
-                                width: 10px; 
-                                height: 10px; 
-                                border-radius: 50%;
-                                border: 2px solid white"></div>`,
-            iconSize: [14, 14],
-            iconAnchor: [7, 7]
-        });
+    // Add debug logging
+    console.log('Game data received:', game);
+    console.log('Players:', game.players);
+
+    const getPlayerName = (player: any) => {
+        // If this player is the host
+        if (player.user?.id === game.host.id) {
+            return `${game.host.username} (Host)`;
+        }
+
+        // If this player is the current user
+        if (player.user?.id === currentUser.id) {
+            return `${currentUser.username} (You)`;
+        }
+
+        // If player has a user object with username
+        if (player.user?.username) {
+            return player.user.username;
+        }
+
+        // If we can't determine the name
+        return `Player ${player.team + 1}`;
     };
 
-    if (!mapLoaded || !userLocation) {
-        return <div>Loading map...</div>;
-    }
+    const getTeamName = (teamNumber: number) => {
+        return teamNumber === game.hunted_team ? 'Hunted' : 'Hunters';
+    };
 
     return (
-        <IonContent className="ion-padding" style={{ height: '100vh' }}>
-            <MapContainer
-                center={userLocation}
-                zoom={15}
-                style={{ height: '100%', width: '100%', position: 'absolute', top: 0, left: 0 }}
-                whenReady={() => setMapLoaded(true)}
-            >
-                <MapController center={userLocation} />
-                <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                />
-                
-                {/* Current player location */}
-                <Marker position={userLocation} />
-                
-                {/* Game area */}
-                {game?.current_area && (
-                    <Circle
-                        center={[
-                            game.current_area.coordinates[0][0][1],
-                            game.current_area.coordinates[0][0][0]
-                        ]}
-                        radius={game.current_area.radius}
-                        pathOptions={{ color: 'blue', fillColor: 'blue' }}
+        <div className="active-game-container">
+            <div className="map-wrapper">
+                <MapContainer
+                    center={center}
+                    zoom={15}
+                    scrollWheelZoom={true}
+                >
+                    <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     />
-                )}
 
-                {/* Other players from same team */}
-                {game?.players
-                    .filter((player: any) => 
-                        player.team === game.currentPlayer?.team && 
-                        player.id !== game.currentPlayer?.id)
-                    .map((player: any) => (
-                        player.location && (
+                    {game.current_area && (
+                        <Circle
+                            center={center}
+                            radius={game.radius || 500}
+                            pathOptions={{ color: 'blue', fillColor: 'blue', fillOpacity: 0.1 }}
+                        />
+                    )}
+
+                    {/* Player markers */}
+                    {Array.isArray(game.players) && game.players.map(player => {
+                        if (!player?.location) return null;
+                        const playerName = getPlayerName(player);
+                        
+                        return (
                             <Marker
                                 key={player.id}
-                                position={[player.location.lat, player.location.lng]}
-                                icon={createTeamIcon(player.team)}
+                                position={player.location}
+                                icon={L.divIcon({
+                                    className: `player-marker team-${player.team}`,
+                                    html: `<div>${playerName}</div>`
+                                })}
                             />
-                        )
-                    ))
-                }
-            </MapContainer>
+                        );
+                    })}
 
-            <IonFab vertical="bottom" horizontal="end" slot="fixed">
-                <IonFabButton onClick={() => {/* Handle taking photo */}}>
-                    <IonIcon icon={camera} />
-                </IonFabButton>
-            </IonFab>
+                    {currentLocation && (
+                        <Marker
+                            position={currentLocation}
+                            icon={L.divIcon({
+                                className: 'current-player-marker',
+                                html: `<div>You</div>`
+                            })}
+                        />
+                    )}
+                </MapContainer>
+            </div>
 
-            {error && (
-                <div className="error-message">
-                    {error}
+            <div className="game-controls">
+                <h3>Game Status</h3>
+                <div className="team-status">
+                    <div className="team-info hunted">
+                        <h4>Hunted Team</h4>
+                        <div className="team-players">
+                            {game.players
+                                .filter(p => p.team === game.hunted_team)
+                                .map((player, index) => (
+                                    <div key={player.id || index} className="player-name">
+                                        {getPlayerName(player)}
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                    <div className="team-info hunters">
+                        <h4>Hunters Team</h4>
+                        <div className="team-players">
+                            {game.players
+                                .filter(p => p.team !== game.hunted_team)
+                                .map((player, index) => (
+                                    <div key={player.id || index} className="player-name">
+                                        {getPlayerName(player)}
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
                 </div>
+            </div>
+
+            <div className="player-list">
+                <h3>Players ({game.players.length})</h3>
+                {Array.isArray(game.players) && game.players.map((player, index) => {
+                    const playerName = getPlayerName(player);
+                    const team = player.team ?? '-';
+                    const isCurrentUser = player.user?.id === currentUser.id;
+                    const teamRole = getTeamName(team);
+                    
+                    return (
+                        <div 
+                            key={player.id || index} 
+                            className={`player-item team-${team} ${isCurrentUser ? 'current-player' : ''}`}
+                        >
+                            {playerName} - {teamRole}
+                        </div>
+                    );
+                })}
+            </div>
+            
+            {error && (
+                <div className="error-message">{error}</div>
             )}
-        </IonContent>
+        </div>
     );
 };
 

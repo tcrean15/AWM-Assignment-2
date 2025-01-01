@@ -6,7 +6,8 @@ import {
     IonTitle,
     IonToolbar,
     useIonToast,
-    IonButton,
+    useIonViewDidEnter,
+    useIonViewWillLeave
 } from '@ionic/react';
 import { useParams } from 'react-router';
 import { ApiService } from '../services/api.service';
@@ -18,7 +19,17 @@ const Game: React.FC = () => {
     const [game, setGame] = useState<any>(null);
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [present] = useIonToast();
-    const [error, setError] = useState<string | null>(null);
+
+    useIonViewDidEnter(() => {
+        // Reset focus when entering the page
+        document.querySelector('.game-container')?.setAttribute('tabindex', '-1');
+        (document.querySelector('.game-container') as HTMLElement)?.focus();
+    });
+
+    useIonViewWillLeave(() => {
+        // Clean up when leaving the page
+        document.querySelector('.game-container')?.removeAttribute('tabindex');
+    });
 
     const loadGame = async () => {
         try {
@@ -26,7 +37,11 @@ const Game: React.FC = () => {
             setGame(gameData);
         } catch (error) {
             console.error('Error loading game:', error);
-            setError('Failed to load game');
+            present({
+                message: 'Failed to load game',
+                duration: 2000,
+                color: 'danger'
+            });
         }
     };
 
@@ -36,75 +51,30 @@ const Game: React.FC = () => {
             setCurrentUser(userData);
         } catch (error) {
             console.error('Error loading user:', error);
-            setError('Failed to load user data');
+            present({
+                message: 'Failed to load user data',
+                duration: 2000,
+                color: 'danger'
+            });
         }
     };
 
     useEffect(() => {
         loadGame();
         loadCurrentUser();
-        // Set up polling for game updates
         const interval = setInterval(loadGame, 3000);
         return () => clearInterval(interval);
     }, [id]);
 
     const handleStartGame = async () => {
         try {
-            const token = localStorage.getItem('token');
-            console.log('Current token:', token); // Debug log
-            
-            if (!token) {
-                present({
-                    message: 'Please log in first',
-                    duration: 2000,
-                    color: 'warning'
-                });
-                return;
-            }
-
-            // Test authentication
-            const currentUser = await ApiService.getCurrentUser();
-            console.log('Current user:', currentUser); // Debug log
-
-            await ApiService.startGame(parseInt(id));
-            await loadGame();
-            present({
-                message: 'Game started successfully!',
-                duration: 2000,
-                color: 'success'
-            });
-        } catch (error: any) {
-            console.error('Error starting game:', error);
-            present({
-                message: error.message || 'Failed to start game. Please ensure you are logged in and are the host.',
-                duration: 3000,
-                color: 'danger'
-            });
-        }
-    };
-
-    const testAuthentication = async () => {
-        try {
-            const result = await ApiService.testAuth();
-            console.log('Auth test result:', result);
-            present({
-                message: 'Authentication successful',
-                duration: 2000,
-                color: 'success'
-            });
+            const updatedGame = await ApiService.startGame(game.id);
+            console.log('Game started:', updatedGame);
+            setGame(updatedGame);
         } catch (error) {
-            console.error('Auth test failed:', error);
-            present({
-                message: 'Authentication failed',
-                duration: 2000,
-                color: 'danger'
-            });
+            console.error('Error starting game:', error);
         }
     };
-
-    if (error) {
-        return <div>Error: {error}</div>;
-    }
 
     return (
         <IonPage>
@@ -113,21 +83,20 @@ const Game: React.FC = () => {
                     <IonTitle>Game {id}</IonTitle>
                 </IonToolbar>
             </IonHeader>
-            <IonContent>
-                <GameProvider>
-                    <IonButton onClick={testAuthentication}>
-                        Test Authentication
-                    </IonButton>
-                    {game && currentUser ? (
-                        <GameDetail
-                            game={game}
-                            currentUser={currentUser}
-                            onStartGame={handleStartGame}
-                        />
-                    ) : (
-                        <div>Loading...</div>
-                    )}
-                </GameProvider>
+            <IonContent fullscreen>
+                <div className="game-container" role="main">
+                    <GameProvider>
+                        {game && currentUser ? (
+                            <GameDetail
+                                game={game}
+                                currentUser={currentUser}
+                                onStartGame={handleStartGame}
+                            />
+                        ) : (
+                            <div className="loading-container">Loading game data...</div>
+                        )}
+                    </GameProvider>
+                </div>
             </IonContent>
         </IonPage>
     );

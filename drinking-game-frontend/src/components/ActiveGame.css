@@ -1,16 +1,76 @@
+.active-game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 16px;
+}
+
+.map-wrapper {
+    width: 100%;
+    height: 60vh; /* Takes up 60% of viewport height */
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
 .leaflet-container {
     width: 100%;
     height: 100%;
 }
 
-.team-marker {
+.game-controls {
+    padding: 16px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.player-list {
+    padding: 16px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.player-item {
+    padding: 8px 12px;
+    margin: 4px 0;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.player-item:last-child {
+    border-bottom: none;
+}
+
+.team-0 {
+    color: var(--hunters-color, #007bff);
+}
+
+.team-1 {
+    color: var(--hunted-color, #dc3545);
+}
+
+.player-marker {
+    background: white;
+    border: 2px solid #000;
     border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 0 4px rgba(0,0,0,0.4);
+    padding: 5px;
+}
+
+.current-player-marker {
+    background: #007bff;
+    color: white;
+    border-radius: 50%;
+    padding: 5px;
 }
 
 .error-message {
-    position: absolute;
+    position: fixed;
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
@@ -19,4 +79,61 @@
     padding: 10px 20px;
     border-radius: 5px;
     z-index: 1000;
+}
+
+.current-player {
+    font-weight: bold;
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.player-item:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.team-status {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.team-info {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.team-info h4 {
+    margin: 0 0 8px 0;
+    font-size: 1.1em;
+}
+
+.hunted {
+    border: 2px solid #dc3545;
+}
+
+.hunters {
+    border: 2px solid #007bff;
+}
+
+.team-players {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.player-name {
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.player-marker.team-0 {
+    background: var(--hunters-color, #007bff);
+    color: white;
+}
+
+.player-marker.team-1 {
+    background: var(--hunted-color, #dc3545);
+    color: white;
 } 

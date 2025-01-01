@@ -1,0 +1,16 @@
+.game-detail-container {
+    padding: 20px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.area-selector-container {
+    flex: 1;
+    min-height: 400px;
+    margin-bottom: 20px;
+}
+
+.start-game-button {
+    margin-top: 20px;
+} 

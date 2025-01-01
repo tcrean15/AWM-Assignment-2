@@ -128,4 +128,34 @@ export class ApiService {
             throw error;
         }
     }
+
+    static async setGameArea(gameId: number, center: [number, number], radius: number) {
+        try {
+            console.log('Setting game area with:', {
+                gameId,
+                center,
+                radius,
+                url: `/api/games/${gameId}/set_area/`
+            });
+
+            const response = await axiosInstance.post(`/api/games/${gameId}/set_area/`, {
+                center: {
+                    type: 'Point',
+                    coordinates: [center[1], center[0]] // Swap lat/lng for backend format
+                },
+                radius: radius
+            });
+
+            console.log('Set area response:', response.data);
+            
+            // Verify the area was set correctly
+            const gameData = await this.getGame(gameId);
+            console.log('Updated game data:', gameData);
+            
+            return response.data;
+        } catch (error: any) {
+            console.error('Set area error:', error.response || error);
+            throw new Error(error.response?.data?.error || 'Failed to set game area');
+        }
+    }
 }

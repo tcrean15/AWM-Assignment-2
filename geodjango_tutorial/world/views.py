@@ -200,6 +200,11 @@ class StartGame(APIView):
         try:
             game = Game.objects.get(pk=pk)
             
+            # Add debug logging
+            print(f"Starting game {pk}")
+            print(f"Area set: {game.area_set}")
+            print(f"Player count: {game.players.count()}")
+            
             # Check if user is host
             if game.host != request.user:
                 return Response({'error': 'Only the host can start the game'}, status=403)
@@ -209,11 +214,8 @@ class StartGame(APIView):
                 return Response({'error': 'Game area must be set before starting'}, status=400)
 
             # Check minimum players
-            if game.players.count() < 3:
-                return Response({'error': 'Need at least 3 players to start'}, status=400)
-            
-            # Assign teams and hunted player
-            game.assign_teams_and_hunted()
+            if game.players.count() < 2:  # Changed from 3 to 2 for testing
+                return Response({'error': 'Need at least 2 players to start'}, status=400)
             
             # Update game status
             game.status = 'ACTIVE'
@@ -507,3 +509,37 @@ def update_game_area(request, game_id):
         return Response({'error': 'Game not found'}, status=404)
     except (ValueError, KeyError) as e:
         return Response({'error': f'Invalid data: {str(e)}'}, status=400)
+
+@api_view(['POST'])
+def set_game_area(request, game_id):
+    try:
+        game = Game.objects.get(id=game_id)
+        center = request.data.get('center')
+        radius = request.data.get('radius')
+        
+        # Create a circular polygon from center and radius
+        point = Point(center['coordinates'])
+        circle = point.buffer(radius / 111000)  # Convert meters to degrees (approximately)
+        
+        # Update both current_area and start_area
+        game.current_area = circle
+        game.start_area = circle  # Add this line
+        game.area_set = True
+        game.radius = radius  # Store the radius
+        game.save()
+        
+        print(f"Set game area - Center: {center['coordinates']}, Radius: {radius}")
+        print(f"Resulting area: {game.current_area}")
+        
+        return Response({
+            'status': 'success',
+            'area': {
+                'center': center['coordinates'],
+                'radius': radius
+            }
+        })
+    except Game.DoesNotExist:
+        return Response({'error': 'Game not found'}, status=404)
+    except Exception as e:
+        print(f"Error setting game area: {str(e)}")
+        return Response({'error': str(e)}, status=400)
