@@ -200,6 +200,8 @@ CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'https://awm1.uksouth.cloudapp.azure.com',
+    'http://awm1.uksouth.cloudapp.azure.com',
 ]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
@@ -363,3 +365,10 @@ CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SECURE = False  # Set to True in production
 CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_TRUSTED_ORIGINS = ['http://localhost:5173']
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://awm1.uksouth.cloudapp.azure.com',
+    'http://awm1.uksouth.cloudapp.azure.com',
+]

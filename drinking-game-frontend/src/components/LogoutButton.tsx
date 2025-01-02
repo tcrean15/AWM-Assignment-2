@@ -1,7 +1,7 @@
 import React from 'react';
 import { IonButton } from '@ionic/react';
 import { useHistory } from 'react-router';
-import { API_URL } from '../config';
+import { API_BASE_URL } from '../config';
 
 interface LogoutButtonProps {
     slot?: string;
@@ -12,7 +12,7 @@ const LogoutButton: React.FC<LogoutButtonProps> = ({ slot }) => {
 
     const handleLogout = async () => {
         try {
-            const response = await fetch(`${API_URL}/api/logout/`, {
+            const response = await fetch(`${API_BASE_URL}/api/logout/`, {
                 method: 'POST',
                 credentials: 'include',
             });

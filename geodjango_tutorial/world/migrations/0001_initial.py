@@ -255,7 +255,6 @@ class Migration(migrations.Migration):
                         blank=True, null=True, srid=4326
                     ),
                 ),
-                ("created_at", models.DateTimeField(default=django.utils.timezone.now)),
                 (
                     "game",
                     models.ForeignKey(

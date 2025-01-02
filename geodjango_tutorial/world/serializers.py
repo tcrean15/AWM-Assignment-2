@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Game, GamePlayer, GameHint
+from .models import Game, GamePlayer, GameHint, ChatMessage
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -44,3 +44,10 @@ class GameSerializer(serializers.ModelSerializer):
         if obj.current_area:
             return obj.current_area.ewkt
         return None 
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = ChatMessage
+        fields = ['id', 'content', 'username', 'created_at'] 

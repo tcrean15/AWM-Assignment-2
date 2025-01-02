@@ -1,7 +1,7 @@
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import Game, GamePlayer
-from .serializers import GameSerializer
+from .models import Game, GamePlayer, ChatMessage
+from .serializers import GameSerializer, ChatMessageSerializer
 from django.contrib.gis.geos import Point
 from .tasks import check_game_status
 
@@ -29,7 +29,9 @@ class GameConsumer(AsyncJsonWebsocketConsumer):
         message_type = content.get('type')
         
         try:
-            if message_type == 'update_location':
+            if message_type == 'chat_message':
+                await self.handle_chat_message(content)
+            elif message_type == 'update_location':
                 success = await self.update_location(content)
                 if success:
                     # Broadcast game update to all players
@@ -96,3 +98,37 @@ class GameConsumer(AsyncJsonWebsocketConsumer):
         """Get serialized game data"""
         game = Game.objects.get(id=self.game_id)
         return GameSerializer(game).data
+
+    async def handle_chat_message(self, content):
+        """Handle incoming chat messages"""
+        message = await self.save_chat_message(content.get('message'))
+        if message:
+            # Broadcast to all connected clients in the game
+            await self.channel_layer.group_send(
+                self.game_group_name,
+                {
+                    'type': 'chat_message',
+                    'message': message
+                }
+            )
+
+    async def chat_message(self, event):
+        """Send chat message to WebSocket"""
+        await self.send_json({
+            'type': 'chat_message',
+            'message': event['message']
+        })
+
+    @database_sync_to_async
+    def save_chat_message(self, content):
+        """Save chat message to database"""
+        try:
+            game = Game.objects.get(id=self.game_id)
+            message = ChatMessage.objects.create(
+                game=game,
+                user=self.scope['user'],
+                content=content
+            )
+            return ChatMessageSerializer(message).data
+        except Game.DoesNotExist:
+            return None

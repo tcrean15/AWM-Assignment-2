@@ -1,5 +1,6 @@
 import LogoutButton from '../components/LogoutButton';
 import EndGameButton from '../components/EndGameButton';
+import GameChat from '../components/GameChat';
 
 const GameLobby: React.FC = () => {
   return (
@@ -14,6 +15,7 @@ const GameLobby: React.FC = () => {
       </IonHeader>
       <IonContent>
         {isHost && <EndGameButton gameId={gameId} />}
+        <GameChat gameId={gameId} websocket={websocket} />
       </IonContent>
     </IonPage>
   );

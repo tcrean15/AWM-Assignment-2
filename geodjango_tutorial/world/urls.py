@@ -17,4 +17,5 @@ urlpatterns = [
     path('games/<int:game_id>/update-area/', views.update_game_area, name='update-game-area'),
     path('api/games/<int:game_id>/set_area/', views.set_game_area, name='set_game_area'),
     path('api/register/', views.register_view, name='register'),
+    path('games/<int:game_id>/chat/', views.chat_history, name='chat-history'),
 ] 

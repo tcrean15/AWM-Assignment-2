@@ -7,8 +7,8 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .models import Game, GamePlayer, GameHint
-from .serializers import GameSerializer, GameHintSerializer
+from .models import Game, GamePlayer, GameHint, ChatMessage
+from .serializers import GameSerializer, GameHintSerializer, ChatMessageSerializer
 from django.contrib.gis.geos import Polygon, Point
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.generic import ListView, DetailView
@@ -630,3 +630,14 @@ def start_game(request, game_id):
     except Exception as e:
         print(f"Error starting game: {str(e)}")  # Debug print
         return Response({'error': str(e)}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def chat_history(request, game_id):
+    try:
+        game = Game.objects.get(id=game_id)
+        messages = ChatMessage.objects.filter(game=game)
+        serializer = ChatMessageSerializer(messages, many=True)
+        return Response(serializer.data)
+    except Game.DoesNotExist:
+        return Response({'error': 'Game not found'}, status=404)

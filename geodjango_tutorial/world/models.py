@@ -227,3 +227,15 @@ class GameHint(models.Model):
 
     def __str__(self):
         return f"Hint for game {self.game.id} at {self.created_at}"
+
+class ChatMessage(models.Model):
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='messages')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.user.username}: {self.content[:50]}"

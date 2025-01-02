@@ -12,14 +12,31 @@ services:
       - ./certbot/www:/var/www/certbot
     depends_on:
       - awm_django_app
+      - frontend
     networks:
       - awm2024
+    stop_grace_period: 1m
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  frontend:
+    image: tcrean15/drinking_game_frontend:latest
+    expose:
+      - "5173"
+    networks:
+      - awm2024
+    environment:
+      - VITE_API_URL=https://awm1.uksouth.cloudapp.azure.com/api
+    restart: unless-stopped
+    stop_grace_period: 1m
 
   redis:
     image: redis:6-alpine
+    ports:
+      - "6379:6379"
     networks:
       - awm2024
+    restart: unless-stopped
+    stop_grace_period: 1m
 
   certbot:
     image: certbot/certbot
@@ -33,9 +50,9 @@ services:
       - nginx
 
   postgis:
-    image: tcrean15/geodjango_postgis:latest
-    expose:
-      - "5432"
+    image: postgis/postgis:15-3.3
+    ports:
+      - "5433:5432"
     environment:
       - POSTGRES_DB=${DB_NAME}
       - POSTGRES_USER=${DB_USER}
@@ -50,12 +67,11 @@ services:
       retries: 5
     networks:
       - awm2024
-    restart: always
+    restart: unless-stopped
+    stop_grace_period: 1m
 
   awm_django_app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: tcrean15/geodjango_backend:latest
     expose:
       - "8001"
     depends_on:
@@ -79,8 +95,8 @@ services:
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
-    restart: always
-
+    restart: unless-stopped
+    stop_grace_period: 1m
 
 networks:
   awm2024:
