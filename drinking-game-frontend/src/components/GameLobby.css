@@ -1,0 +1,65 @@
+.game-lobby {
+  padding: 1rem;
+}
+
+.teams-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.team-section {
+  border: 1px solid var(--ion-color-light);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.team-section.hunted {
+  background-color: rgba(var(--ion-color-danger-rgb), 0.1);
+}
+
+.team-section.hunters {
+  background-color: rgba(var(--ion-color-primary-rgb), 0.1);
+}
+
+.team-section h3 {
+  color: var(--ion-color-dark);
+  margin: 0 0 0.5rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--ion-color-light);
+}
+
+.team-players {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hunter-team {
+  padding: 0.5rem;
+  background-color: rgba(var(--ion-color-light-rgb), 0.1);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.hunter-team h4 {
+  margin: 0 0 0.5rem 0;
+  color: var(--ion-color-primary);
+  font-size: 0.9em;
+}
+
+.player-item {
+  padding: 0.5rem;
+  border-radius: 4px;
+  background-color: rgba(var(--ion-color-light-rgb), 0.3);
+}
+
+.player-item.current-user {
+  font-weight: bold;
+  background-color: rgba(var(--ion-color-success-rgb), 0.1);
+}
+
+.start-button {
+  margin-top: 1rem;
+} 

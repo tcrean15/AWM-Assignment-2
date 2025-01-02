@@ -10,7 +10,7 @@
 
 .map-wrapper {
     width: 100%;
-    height: 60vh; /* Takes up 60% of viewport height */
+    height: 60vh;
     position: relative;
     border-radius: 8px;
     overflow: hidden;
@@ -29,111 +29,52 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
-.player-list {
-    padding: 16px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-
-.player-item {
-    padding: 8px 12px;
-    margin: 4px 0;
-    border-radius: 4px;
-    transition: background-color 0.2s;
-}
-
-.player-item:last-child {
-    border-bottom: none;
-}
-
-.team-0 {
-    color: var(--hunters-color, #007bff);
-}
-
-.team-1 {
-    color: var(--hunted-color, #dc3545);
-}
-
-.player-marker {
-    background: white;
-    border: 2px solid #000;
-    border-radius: 50%;
-    padding: 5px;
-}
-
-.current-player-marker {
-    background: #007bff;
-    color: white;
-    border-radius: 50%;
-    padding: 5px;
-}
-
-.error-message {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(255, 0, 0, 0.8);
-    color: white;
-    padding: 10px 20px;
-    border-radius: 5px;
-    z-index: 1000;
-}
-
-.current-player {
-    font-weight: bold;
-    background-color: rgba(0, 123, 255, 0.1);
-}
-
-.player-item:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-}
-
-.team-status {
+.teams-container {
     display: flex;
-    gap: 16px;
-    margin-bottom: 16px;
+    flex-direction: column;
+    gap: 1rem;
 }
 
-.team-info {
-    flex: 1;
-    padding: 12px;
+.team-section {
+    border: 1px solid var(--ion-color-light);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.9);
+    padding: 1rem;
 }
 
-.team-info h4 {
-    margin: 0 0 8px 0;
-    font-size: 1.1em;
+.team-section.hunted {
+    background-color: rgba(var(--ion-color-danger-rgb), 0.1);
 }
 
-.hunted {
-    border: 2px solid #dc3545;
-}
-
-.hunters {
-    border: 2px solid #007bff;
+.team-section.hunters {
+    background-color: rgba(var(--ion-color-primary-rgb), 0.1);
 }
 
 .team-players {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 0.5rem;
 }
 
-.player-name {
-    padding: 4px 8px;
+.hunter-team {
+    padding: 0.5rem;
+    background-color: rgba(var(--ion-color-light-rgb), 0.1);
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.05);
 }
 
-.player-marker.team-0 {
-    background: var(--hunters-color, #007bff);
-    color: white;
+.player-item {
+    padding: 0.5rem;
+    border-radius: 4px;
+    background-color: rgba(var(--ion-color-light-rgb), 0.3);
 }
 
-.player-marker.team-1 {
-    background: var(--hunted-color, #dc3545);
-    color: white;
+.player-item.current-user {
+    font-weight: bold;
+    background-color: rgba(var(--ion-color-success-rgb), 0.1);
+}
+
+.current-player-marker {
+    background-color: blue;
+    border-radius: 50%;
+    width: 10px;
+    height: 10px;
 } 

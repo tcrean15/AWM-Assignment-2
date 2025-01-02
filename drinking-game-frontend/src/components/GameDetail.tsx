@@ -29,6 +29,21 @@ const GameDetail: React.FC<GameDetailProps> = ({ game, currentUser, onStartGame 
         setAreaSet(game?.area_set || false);
     }, [game?.area_set]);
 
+    useEffect(() => {
+        const fetchGameData = async () => {
+            try {
+                const response = await fetch(`/api/games/${game.id}/`);
+                const data = await response.json();
+                console.log('Raw game data from API:', data);
+                setGame(data);
+            } catch (error) {
+                console.error('Error fetching game:', error);
+            }
+        };
+
+        fetchGameData();
+    }, [game.id]);
+
     console.log('Game status:', game.status);
 
     if (!game || !currentUser || !game.host) {

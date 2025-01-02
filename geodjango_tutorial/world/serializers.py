@@ -33,7 +33,14 @@ class GamePlayerSerializer(serializers.ModelSerializer):
 class GameSerializer(serializers.ModelSerializer):
     players = GamePlayerSerializer(many=True, read_only=True)
     host = UserSerializer()
+    current_area = serializers.SerializerMethodField()
+    radius = serializers.FloatField()
 
     class Meta:
         model = Game
-        fields = ['id', 'status', 'host', 'players'] 
+        fields = ['id', 'status', 'host', 'players', 'current_area', 'radius']
+
+    def get_current_area(self, obj):
+        if obj.current_area:
+            return obj.current_area.ewkt
+        return None 

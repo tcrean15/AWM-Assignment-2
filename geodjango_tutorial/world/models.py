@@ -120,12 +120,13 @@ class Game(models.Model):
     host = models.ForeignKey(User, on_delete=models.CASCADE, related_name='hosted_games', null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='WAITING')
     start_area = models.PolygonField()
-    current_area = models.PolygonField()
+    current_area = models.PolygonField(null=True, blank=True)
     selected_player = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='selected_in_games')
     hunted_player = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='hunted_in_games')
     created_at = models.DateTimeField(auto_now_add=True)
     area_set = models.BooleanField(default=False)
     radius = models.FloatField(default=500)
+    center = models.PointField(null=True, blank=True)
 
     def assign_teams_and_hunted(self):
         """Randomly assign teams and select a hunted player"""
@@ -182,6 +183,15 @@ class Game(models.Model):
 
         self.save()
         print("Team assignment complete")  # Debug print
+
+    def set_game_area(self, center_lat, center_lng, radius):
+        from django.contrib.gis.geos import Point
+        self.center = Point(center_lng, center_lat)
+        self.radius = radius
+        # Create circular polygon for the area
+        self.current_area = self.center.buffer(radius / 111000)  # Convert meters to degrees
+        self.area_set = True
+        self.save()
 
     def __str__(self):
         return f"Game {self.id} ({self.status})"
