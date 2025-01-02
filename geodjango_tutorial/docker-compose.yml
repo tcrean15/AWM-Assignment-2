@@ -90,6 +90,7 @@ services:
       - DB_HOST=postgis
       - DB_PORT=5432
       - REDIS_HOST=redis
+      - DJANGO_ALLOWED_HOSTS=*
     networks:
       - awm2024
     volumes:
@@ -97,6 +98,10 @@ services:
       - media_volume:/app/media
     restart: unless-stopped
     stop_grace_period: 1m
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             daphne -b 0.0.0.0 -p 8001 geodjango_tutorial.asgi:application"
 
 networks:
   awm2024:

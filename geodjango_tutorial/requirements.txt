@@ -7,8 +7,6 @@ gunicorn
 djangorestframework
 django-filter
 markdown
-channels
-channels-redis
 django-cors-headers
 pillow
 django-storages

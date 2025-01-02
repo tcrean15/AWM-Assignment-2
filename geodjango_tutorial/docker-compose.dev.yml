@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  postgis:
+    image: postgis/postgis:15-3.3
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=geodjango
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  dev_network:
+    driver: bridge 

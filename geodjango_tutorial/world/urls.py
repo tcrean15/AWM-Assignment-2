@@ -18,4 +18,6 @@ urlpatterns = [
     path('api/games/<int:game_id>/set_area/', views.set_game_area, name='set_game_area'),
     path('api/register/', views.register_view, name='register'),
     path('games/<int:game_id>/chat/', views.chat_history, name='chat-history'),
+    path('games/<int:game_id>/messages/', views.game_messages, name='game_messages'),
+    path('games/<int:game_id>/subtract-kitty/', views.subtract_from_kitty, name='subtract-kitty'),
 ] 

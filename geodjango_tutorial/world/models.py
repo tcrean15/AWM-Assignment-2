@@ -3,6 +3,8 @@ from django.contrib.gis.db import models
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.utils import timezone
+from django.db.models.signals import post_save, m2m_changed, post_delete
+from django.dispatch import receiver
 
 class WorldBorder(models.Model):
 
@@ -119,7 +121,7 @@ class Game(models.Model):
     
     host = models.ForeignKey(User, on_delete=models.CASCADE, related_name='hosted_games', null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='WAITING')
-    start_area = models.PolygonField()
+    start_area = models.PolygonField(null=True, blank=True)
     current_area = models.PolygonField(null=True, blank=True)
     selected_player = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='selected_in_games')
     hunted_player = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='hunted_in_games')
@@ -127,6 +129,8 @@ class Game(models.Model):
     area_set = models.BooleanField(default=False)
     radius = models.FloatField(default=500)
     center = models.PointField(null=True, blank=True)
+    kitty_value_per_player = models.DecimalField(max_digits=10, decimal_places=2, default=10)
+    total_kitty = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     def assign_teams_and_hunted(self):
         """Randomly assign teams and select a hunted player"""
@@ -193,8 +197,47 @@ class Game(models.Model):
         self.area_set = True
         self.save()
 
+    def calculate_total_kitty(self):
+        """Calculate total kitty by multiplying kitty value per player by number of players"""
+        self.total_kitty = self.kitty_value_per_player * self.players.count()
+        self.save()
+
+    def subtract_from_kitty(self, amount):
+        """Subtract amount from current total kitty and end game if kitty reaches 0"""
+        if self.total_kitty < amount:
+            raise ValueError("Cannot subtract more than the current kitty value")
+        
+        self.total_kitty -= amount
+        self.save()
+
+        # Check if kitty is depleted
+        if self.total_kitty <= 0:
+            self.status = 'FINISHED'
+            self.save()
+            return True  # Return True to indicate game ended
+        return False
+
+    def add_player(self, user):
+        """Add a player and recalculate kitty"""
+        if not GamePlayer.objects.filter(game=self, user=user).exists():
+            GamePlayer.objects.create(game=self, user=user)
+            self.calculate_total_kitty()  # Recalculate after adding player
+
     def __str__(self):
         return f"Game {self.id} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        # Ensure start_area is set if we have center and radius
+        if self.center and self.radius and not self.start_area:
+            self.start_area = self.center.buffer(self.radius / 111000)
+            self.current_area = self.start_area
+            self.area_set = True
+        
+        # Initialize current_area if not set
+        if self.start_area and not self.current_area:
+            self.current_area = self.start_area
+
+        super().save(*args, **kwargs)
 
 class GamePlayer(models.Model):
     TEAM_CHOICES = [
@@ -239,3 +282,9 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"{self.user.username}: {self.content[:50]}"
+
+@receiver([post_save, post_delete], sender=GamePlayer)
+def update_game_kitty(sender, instance, **kwargs):
+    """Update game's total kitty whenever players change"""
+    if hasattr(instance, 'game'):
+        instance.game.calculate_total_kitty()

@@ -23,6 +23,8 @@ import random
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from rest_framework.authentication import TokenAuthentication
+from rest_framework.exceptions import ValidationError
+from decimal import Decimal
 
 def index(request):
     """Main map view"""
@@ -98,47 +100,76 @@ class GameListCreate(generics.ListCreateAPIView):
     def get_queryset(self):
         return Game.objects.all()
 
-    def create(self, request, *args, **kwargs):
+    def perform_create(self, serializer):
         try:
-            # Create a default game area (Dublin area)
-            default_area = Polygon((
-                (53.3498, -6.2603),
-                (53.3498, -6.2403),
-                (53.3298, -6.2403),
-                (53.3298, -6.2603),
-                (53.3498, -6.2603)
-            ))
+            data = self.request.data
+            print("Received data:", data)  # Debug log
+
+            # Extract coordinates
+            center_data = data.get('center', {})
+            coordinates = center_data.get('coordinates', [])
+            
+            if not coordinates or len(coordinates) != 2:
+                raise ValidationError('Invalid coordinates')
             
             # Create the game
-            game = Game.objects.create(
-                host=request.user,
-                start_area=default_area,
-                current_area=default_area,
-                status='WAITING'
-            )
-            
-            # Create a GamePlayer entry for the host
-            GamePlayer.objects.create(
-                game=game,
-                user=request.user,
-                team=0
-            )
-            
-            serializer = self.get_serializer(game)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
-        except Exception as e:
-            print(f"Error creating game: {str(e)}")
-            return Response(
-                {'error': str(e)}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            game = serializer.save(
+                host=self.request.user,
+                status='WAITING',
+                area_set=True,
+                center=Point(coordinates[0], coordinates[1]),  # longitude, latitude
+                radius=data.get('radius', 500),
+                kitty_value_per_player=data.get('kitty_value_per_player', 10),
+                start_area=Point(coordinates[0], coordinates[1]).buffer(data.get('radius', 500) / 111000)
             )
 
-class GameDetail(generics.RetrieveAPIView):
+            # Add host as first player and calculate initial kitty
+            game.add_player(self.request.user)
+            return game
+
+        except Exception as e:
+            print(f"Error creating game: {str(e)}")  # Debug log
+            raise ValidationError(str(e))
+
+class GameDetail(generics.RetrieveUpdateAPIView):
     queryset = Game.objects.all()
     serializer_class = GameSerializer
-    authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
+
+    def update(self, request, *args, **kwargs):
+        game = self.get_object()
+        
+        # Only host can update the game
+        if game.host != request.user:
+            return Response(
+                {'error': 'Only the host can update the game'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Update the game settings
+        try:
+            data = request.data
+            center_data = data.get('center', {})
+            coordinates = center_data.get('coordinates', [])
+            
+            if coordinates:
+                game.center = Point(coordinates[0], coordinates[1])
+            
+            if 'radius' in data:
+                game.radius = data['radius']
+            
+            if 'kitty_value_per_player' in data:
+                game.kitty_value_per_player = data['kitty_value_per_player']
+                game.calculate_total_kitty()  # Recalculate total kitty
+            
+            game.save()
+            return Response(GameSerializer(game).data)
+            
+        except Exception as e:
+            return Response(
+                {'error': str(e)}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     def get_queryset(self):
         print(f"User making request: {self.request.user}")
@@ -429,9 +460,19 @@ def get_csrf_token(request):
     return JsonResponse({'csrfToken': get_token(request)})
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def logout_view(request):
-    logout(request)
-    return Response({'success': True})
+    try:
+        # Delete the user's token
+        Token.objects.filter(user=request.user).delete()
+        
+        return Response({
+            "message": "Successfully logged out"
+        })
+    except Exception as e:
+        return Response({
+            "error": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -487,34 +528,58 @@ def current_user(request):
 def join_game(request, game_id):
     try:
         game = Game.objects.get(id=game_id)
+        if game.status != 'WAITING':
+            return Response({'error': 'Game has already started'}, status=400)
         
-        # Check if user is already in the game
-        if GamePlayer.objects.filter(game=game, user=request.user).exists():
-            return Response({'error': 'Already joined this game'}, status=status.HTTP_400_BAD_REQUEST)
+        # Check if player is already in the game
+        if not GamePlayer.objects.filter(game=game, user=request.user).exists():
+            # Add player and recalculate kitty
+            game.add_player(request.user)
+            
+            # Force refresh from database and recalculate
+            game.refresh_from_db()
+            game.calculate_total_kitty()  # Force recalculation
+            
+            print(f"Game {game.id} now has {game.players.count()} players")  # Debug log
+            print(f"Kitty per player: €{game.kitty_value_per_player}")  # Debug log
+            print(f"Total kitty: €{game.total_kitty}")  # Debug log
         
-        # Create new player entry
-        GamePlayer.objects.create(
-            game=game,
-            user=request.user,
-            team=1  # You might want to implement team assignment logic
-        )
-        
-        return Response({'success': True})
+        return Response(GameSerializer(game).data)
     except Game.DoesNotExist:
-        return Response({'error': 'Game not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'Game not found'}, status=404)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def end_game(request, game_id):
     try:
         game = Game.objects.get(id=game_id)
-        if request.user == game.host:
-            game.status = 'FINISHED'
-            game.save()
-            return Response({'status': 'Game ended successfully'})
-        return Response({'error': 'Only the host can end the game'}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if user is the host
+        if game.host != request.user:
+            return Response(
+                {"error": "Only the host can end the game"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # End the game
+        game.status = 'FINISHED'
+        game.save()
+        
+        return Response({
+            "message": "Game ended successfully",
+            "game_status": game.status
+        })
+        
     except Game.DoesNotExist:
-        return Response({'error': 'Game not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"error": "Game not found"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -641,3 +706,113 @@ def chat_history(request, game_id):
         return Response(serializer.data)
     except Game.DoesNotExist:
         return Response({'error': 'Game not found'}, status=404)
+
+@api_view(['POST', 'GET'])
+@permission_classes([IsAuthenticated])
+def game_messages(request, game_id):
+    try:
+        game = Game.objects.get(id=game_id)
+        
+        if not game.players.filter(user=request.user).exists():
+            return Response(
+                {"error": "Not authorized to access this game"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if request.method == 'GET':
+            # Get messages in chronological order (oldest first)
+            messages = ChatMessage.objects.filter(game=game).order_by('created_at')
+            serializer = ChatMessageSerializer(messages, many=True)
+            return Response(serializer.data)
+
+        elif request.method == 'POST':
+            # Create new message
+            message = ChatMessage.objects.create(
+                game=game,
+                user=request.user,
+                content=request.data.get('message', '')
+            )
+            serializer = ChatMessageSerializer(message)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    except Game.DoesNotExist:
+        return Response(
+            {"error": "Game not found"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def subtract_from_kitty(request, game_id):
+    try:
+        game = Game.objects.get(id=game_id)
+        player = game.players.get(user=request.user)
+        
+        if player.team != 0:
+            return Response(
+                {"error": "Only hunted players can subtract from kitty"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            amount = Decimal(str(request.data.get('amount', 0)))
+        except:
+            return Response(
+                {"error": "Invalid amount"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if amount <= 0:
+            return Response(
+                {"error": "Amount must be greater than 0"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        current_total = game.total_kitty or game.kitty_value_per_player * game.players.count()
+            
+        if amount > current_total:
+            return Response(
+                {"error": "Cannot subtract more than the total kitty"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Use the new method to subtract and check if game ended
+        game_ended = game.subtract_from_kitty(amount)
+        
+        response_data = {
+            "message": f"Successfully subtracted €{amount} from kitty",
+            "new_total": str(game.total_kitty),
+            "game_ended": game_ended,
+            "game_status": game.status
+        }
+
+        if game_ended:
+            response_data.update({
+                "end_message": "Game Over! The Hunted team has won by depleting the kitty!",
+                "winning_team": "Hunted",
+                "final_kitty": "0.00"
+            })
+        
+        return Response(response_data)
+        
+    except ValueError as e:
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Game.DoesNotExist:
+        return Response(
+            {"error": "Game not found"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except GamePlayer.DoesNotExist:
+        return Response(
+            {"error": "Player not found in game"}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        print(f"Error in subtract_from_kitty: {str(e)}")
+        return Response(
+            {"error": str(e)}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

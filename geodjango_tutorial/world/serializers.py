@@ -32,22 +32,30 @@ class GamePlayerSerializer(serializers.ModelSerializer):
 
 class GameSerializer(serializers.ModelSerializer):
     players = GamePlayerSerializer(many=True, read_only=True)
-    host = UserSerializer()
-    current_area = serializers.SerializerMethodField()
-    radius = serializers.FloatField()
-
+    host = UserSerializer(read_only=True)
+    center = serializers.SerializerMethodField()
+    total_kitty = serializers.DecimalField(max_digits=8, decimal_places=2, read_only=True)
+    kitty_value_per_player = serializers.DecimalField(max_digits=6, decimal_places=2)
+    
     class Meta:
         model = Game
-        fields = ['id', 'status', 'host', 'players', 'current_area', 'radius']
+        fields = [
+            'id', 'status', 'host', 'players', 'current_area', 
+            'radius', 'kitty_value_per_player', 'total_kitty', 'center',
+            'area_set'
+        ]
 
-    def get_current_area(self, obj):
-        if obj.current_area:
-            return obj.current_area.ewkt
-        return None 
+    def get_center(self, obj):
+        if obj.center:
+            return {
+                'type': 'Point',
+                'coordinates': [obj.center.x, obj.center.y]
+            }
+        return None
 
 class ChatMessageSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
-
+    
     class Meta:
         model = ChatMessage
         fields = ['id', 'content', 'username', 'created_at'] 

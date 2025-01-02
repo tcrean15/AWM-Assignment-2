@@ -54,7 +54,6 @@ INSTALLED_APPS = [
     "leaflet",
     "rest_framework",
     "corsheaders",
-    "channels",
     "storages",
     'rest_framework.authtoken',
 ]
@@ -224,19 +223,6 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
-# Add Channel layers for real-time updates
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
-        },
-    },
-}
-
-# Update ASGI application
-ASGI_APPLICATION = 'geodjango_tutorial.asgi.application'
-
 # Media files configuration
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -372,3 +358,14 @@ CSRF_TRUSTED_ORIGINS = [
     'https://awm1.uksouth.cloudapp.azure.com',
     'http://awm1.uksouth.cloudapp.azure.com',
 ]
+
+# CORS settings for development
+if DEBUG:
+    CORS_ALLOWED_ORIGINS.extend([
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ])
+    CSRF_TRUSTED_ORIGINS.extend([
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ])
