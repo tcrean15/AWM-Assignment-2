@@ -4,6 +4,7 @@ import ActiveGame from './ActiveGame';
 import AreaSelector from './AreaSelector';
 import './AreaSelector.css';
 import { ApiService } from '../services/api.service';
+import { useIonRouter } from '@ionic/react';
 
 interface Player {
     id: number;
@@ -18,12 +19,15 @@ interface GameDetailProps {
     game: any;
     currentUser: any;
     onStartGame: () => void;
+    onGameUpdate: () => void;
 }
 
-const GameDetail: React.FC<GameDetailProps> = ({ game, currentUser, onStartGame }) => {
+const GameDetail: React.FC<GameDetailProps> = ({ game, currentUser, onStartGame, onGameUpdate }) => {
     const [areaSet, setAreaSet] = useState(game?.area_set || false);
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
+    const [showGameOverModal, setShowGameOverModal] = useState(false);
+    const navigate = useIonRouter();
 
     useEffect(() => {
         setAreaSet(game?.area_set || false);
@@ -45,6 +49,15 @@ const GameDetail: React.FC<GameDetailProps> = ({ game, currentUser, onStartGame 
     }, [game.id]);
 
     console.log('Game status:', game.status);
+
+    useEffect(() => {
+        if (game.status === 'FINISHED') {
+            // Redirect to home page after a short delay
+            setTimeout(() => {
+                window.location.href = '/home';
+            }, 1000);
+        }
+    }, [game.status]);
 
     if (!game || !currentUser || !game.host) {
         return <div>Loading...</div>;
@@ -95,7 +108,7 @@ const GameDetail: React.FC<GameDetailProps> = ({ game, currentUser, onStartGame 
     };
 
     if (game.status === 'ACTIVE') {
-        return <ActiveGame game={game} currentUser={currentUser} />;
+        return <ActiveGame game={game} currentUser={currentUser} onGameUpdate={onGameUpdate} />;
     }
 
     if (game.status === 'SETUP') {

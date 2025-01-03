@@ -1,34 +1,41 @@
 import React from 'react';
-import { IonButton } from '@ionic/react';
-import { useHistory } from 'react-router';
-import { API_BASE_URL } from '../config';
+import { IonButton, useIonToast } from '@ionic/react';
+import { ApiService } from '../services/api.service';
+import { useHistory } from 'react-router-dom';
 
-interface LogoutButtonProps {
-    slot?: string;
-}
-
-const LogoutButton: React.FC<LogoutButtonProps> = ({ slot }) => {
+const LogoutButton: React.FC = () => {
+    const [present] = useIonToast();
     const history = useHistory();
 
-    const handleLogout = async () => {
+    const handleLogout = () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/logout/`, {
-                method: 'POST',
-                credentials: 'include',
+            // Call the logout method from ApiService
+            ApiService.logout();
+            
+            present({
+                message: 'Successfully logged out',
+                duration: 2000,
+                color: 'success'
             });
 
-            if (response.ok) {
-                // Clear any local storage items if needed
-                localStorage.removeItem('user');
-                history.push('/login');
-            }
+            // Redirect to login page
+            history.push('/login');
+            
         } catch (error) {
-            console.error('Logout failed:', error);
+            present({
+                message: 'Failed to logout',
+                duration: 2000,
+                color: 'danger'
+            });
         }
     };
 
     return (
-        <IonButton onClick={handleLogout} color="danger">
+        <IonButton 
+            onClick={handleLogout}
+            color="medium"
+            fill="solid"
+        >
             Logout
         </IonButton>
     );

@@ -62,4 +62,21 @@
 
 .start-button {
   margin-top: 1rem;
+}
+
+.kitty-info {
+    background: var(--ion-color-light);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.kitty-info h3 {
+    color: var(--ion-color-primary);
+    margin-top: 0;
+}
+
+.kitty-info p {
+    margin: 8px 0;
+    font-size: 1.1em;
 } 

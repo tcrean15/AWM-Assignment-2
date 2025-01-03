@@ -5,6 +5,44 @@ http://ionicframework.com/docs/theming/ */
 :root {
   --team-1-color: #3880ff;
   --team-2-color: #eb445a;
+
+  /* Core CSS required for Ionic components to work properly */
+  --ion-color-primary: #3880ff;
+  --ion-color-primary-rgb: 56, 128, 255;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #3171e0;
+  --ion-color-primary-tint: #4c8dff;
+
+  /* Set light mode as default */
+  --ion-background-color: #ffffff;
+  --ion-background-color-rgb: 255, 255, 255;
+  --ion-text-color: #000000;
+  --ion-text-color-rgb: 0, 0, 0;
+}
+
+/* Override dark mode to use light theme */
+@media (prefers-color-scheme: dark) {
+  /*
+   * Dark Colors
+   * -------------------------------------------
+   */
+
+  body {
+    /* Keep light theme colors even in dark mode */
+    --ion-color-primary: #3880ff;
+    --ion-background-color: #ffffff;
+    --ion-background-color-rgb: 255, 255, 255;
+    --ion-text-color: #000000;
+    --ion-text-color-rgb: 0, 0, 0;
+    --ion-border-color: #cccccc;
+
+    /* Force light mode for all items */
+    --ion-item-background: #ffffff;
+    --ion-toolbar-background: #ffffff;
+    --ion-tab-bar-background: #ffffff;
+    --ion-card-background: #ffffff;
+  }
 }
 
 .team-1 {

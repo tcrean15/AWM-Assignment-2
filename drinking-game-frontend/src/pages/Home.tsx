@@ -1,70 +1,92 @@
-import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar, IonButton, IonToast } from '@ionic/react';
-import { useState } from 'react';
-import { useHistory } from 'react-router';
-import { ApiService } from '../services/api.service';
+import React from 'react';
+import {
+    IonContent,
+    IonHeader,
+    IonPage,
+    IonTitle,
+    IonToolbar,
+    IonCard,
+    IonCardHeader,
+    IonCardTitle,
+    IonCardContent,
+    IonButton,
+    IonIcon,
+    IonGrid,
+    IonRow,
+    IonCol
+} from '@ionic/react';
+import { addCircleOutline, logInOutline } from 'ionicons/icons';
 import './Home.css';
 
 const Home: React.FC = () => {
-    const history = useHistory();
-    const [gameId, setGameId] = useState('');
-    const [showError, setShowError] = useState(false);
-    const [errorMessage, setErrorMessage] = useState('');
-
-    const createGame = async () => {
-        try {
-            // Example area coordinates (you'll want to let users draw this on a map)
-            const area = [[[53.3498, -6.2603], [53.3498, -6.2403], [53.3298, -6.2403], [53.3298, -6.2603], [53.3498, -6.2603]]];
-            const game = await ApiService.createGame(area);
-            history.push(`/game/${game.id}`);
-        } catch (error: any) {
-            console.error('Error creating game:', error);
-            setErrorMessage(error.message || 'Failed to create game');
-            setShowError(true);
-        }
-    };
-
-    const joinGame = async () => {
-        try {
-            await ApiService.joinGame(parseInt(gameId));
-            history.push(`/game/${gameId}`);
-        } catch (error: any) {
-            console.error('Error joining game:', error);
-            setErrorMessage(error.message || 'Failed to join game');
-            setShowError(true);
-        }
-    };
-
     return (
         <IonPage>
             <IonHeader>
                 <IonToolbar>
-                    <IonTitle>Drinking Game</IonTitle>
+                    <IonTitle>Pub Hunt</IonTitle>
                 </IonToolbar>
             </IonHeader>
-            <IonContent>
-                <div className="container">
-                    <IonButton expand="block" onClick={createGame}>
-                        Create New Game
-                    </IonButton>
-                    <div className="join-game">
-                        <input
-                            type="text"
-                            placeholder="Enter Game ID"
-                            value={gameId}
-                            onChange={(e) => setGameId(e.target.value)}
-                        />
-                        <IonButton expand="block" onClick={joinGame}>
-                            Join Game
-                        </IonButton>
-                    </div>
-                </div>
-                <IonToast
-                    isOpen={showError}
-                    onDidDismiss={() => setShowError(false)}
-                    message={errorMessage}
-                    duration={3000}
-                    color="danger"
-                />
+            <IonContent fullscreen>
+                <IonCard className="welcome-card">
+                    <IonCardHeader>
+                        <IonCardTitle>Welcome to Pub Hunt</IonCardTitle>
+                    </IonCardHeader>
+                    <IonCardContent>
+                        <h2>How to Play</h2>
+                        <p>
+                            Pub Hunt is an exciting real-world drinking game that combines hide and seek with pub crawling!
+                        </p>
+
+                        <h3>Game Setup</h3>
+                        <ul>
+                            <li>Minimum 3 players required</li>
+                            <li>One player hosts the game</li>
+                            <li>Other players join using the game code</li>
+                            <li>All players contribute to the kitty (prize pool)</li>
+                        </ul>
+
+                        <h3>Roles</h3>
+                        <ul>
+                            <li><strong>The Hunted:</strong> One randomly selected player who must find a pub to hide in</li>
+                            <li><strong>The Hunters:</strong> Other players split into teams of 2 who must find the hunted player</li>
+                        </ul>
+
+                        <h3>Gameplay</h3>
+                        <ul>
+                            <li>Host sets the game area and kitty value</li>
+                            <li>The hunted player can subtract from the kitty during the game</li>
+                            <li>Hunters must work together to find the hunted player</li>
+                            <li>Find the hunted player to take part in spending the kitty</li>
+                        </ul>
+
+                        <div className="action-buttons">
+                            <IonGrid>
+                                <IonRow>
+                                    <IonCol>
+                                        <IonButton 
+                                            expand="block" 
+                                            routerLink="/create-game"
+                                            color="primary"
+                                        >
+                                            <IonIcon slot="start" icon={addCircleOutline} />
+                                            Create Game
+                                        </IonButton>
+                                    </IonCol>
+                                    <IonCol>
+                                        <IonButton 
+                                            expand="block" 
+                                            routerLink="/join-game"
+                                            color="secondary"
+                                        >
+                                            <IonIcon slot="start" icon={logInOutline} />
+                                            Join Game
+                                        </IonButton>
+                                    </IonCol>
+                                </IonRow>
+                            </IonGrid>
+                        </div>
+                    </IonCardContent>
+                </IonCard>
             </IonContent>
         </IonPage>
     );

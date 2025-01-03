@@ -21,4 +21,13 @@ export interface Game {
   host: User;
   selected_player?: User;
   players: GamePlayer[];
+}
+
+export interface Message {
+    id: number;
+    content?: string;
+    message?: string;
+    username: string;
+    created_at: string;
+    is_own_message?: boolean;
 } 

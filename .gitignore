@@ -4,3 +4,20 @@ Video of application in use.MOV
 *.mp4
 *.MOV
 
+# Android build files
+drinking-game-frontend/android/app/build/
+drinking-game-frontend/android/build/
+
+# General build and dependency directories
+**/node_modules/
+**/dist/
+**/.ionic/
+**/.sass-cache/
+**/.versions/
+**/coverage/
+**/tmp/
+**/temp/
+**/platforms/
+**/plugins/
+**/*.pyc
+**/__pycache__/

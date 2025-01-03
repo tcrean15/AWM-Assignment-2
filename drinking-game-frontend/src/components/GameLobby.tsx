@@ -48,6 +48,14 @@ const GameLobby: React.FC<GameLobbyProps> = ({ game, isHost, onStartGame }) => {
           <IonCardTitle>Game Status</IonCardTitle>
         </IonCardHeader>
         <IonCardContent>
+          {/* Kitty Information */}
+          <div className="kitty-info">
+            <h3>Kitty Information</h3>
+            <p>Contribution per player: €{game.kitty_value_per_player}</p>
+            <p>Total players: {game.players.length}</p>
+            <p>Total kitty: €{game.total_kitty}</p>
+          </div>
+
           <div className="teams-container">
             {/* Hunted Team */}
             <div className="team-section hunted">

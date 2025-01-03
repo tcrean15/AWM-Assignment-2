@@ -13,3 +13,46 @@
     border: 1px solid #ccc;
     border-radius: 4px;
 }
+
+.welcome-card {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+}
+
+.welcome-card h2 {
+    color: var(--ion-color-primary);
+    margin-bottom: 20px;
+}
+
+.welcome-card h3 {
+    color: var(--ion-color-secondary);
+    margin-top: 25px;
+    margin-bottom: 15px;
+}
+
+.welcome-card ul {
+    padding-left: 20px;
+    margin-bottom: 20px;
+}
+
+.welcome-card li {
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+.action-buttons {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid var(--ion-color-light);
+}
+
+.welcome-card p {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--ion-color-medium);
+}
+
+.welcome-card strong {
+    color: var(--ion-color-dark);
+}

@@ -1,9 +1,12 @@
 import axios from 'axios';
 
-const API_URL = 'http://127.0.0.1:8000/api';
+const API_URL = process.env.NODE_ENV === 'production' 
+    ? 'https://awm1.uksouth.cloudapp.azure.com/api'  // Production URL
+    : 'http://localhost:8000/api';  // Development URL
 
 const axiosInstance = axios.create({
     baseURL: API_URL,
+    timeout: 10000,  // Increase timeout for production
     headers: {
         'Content-Type': 'application/json',
     }
@@ -16,6 +19,15 @@ axiosInstance.interceptors.request.use(config => {
         config.headers.Authorization = `Token ${token}`;
     }
     return config;
+});
+
+// Add retry logic
+axiosInstance.interceptors.response.use(undefined, async (error) => {
+    if (error.code === 'ERR_NETWORK') {
+        console.error('Network error - server might be down');
+        // You could add retry logic here if needed
+    }
+    return Promise.reject(error);
 });
 
 export class ApiService {
@@ -64,14 +76,25 @@ export class ApiService {
         }
     }
 
-    static async getGame(gameId: number) {
-        try {
-            const response = await axiosInstance.get(`/games/${gameId}/`);
-            return response.data;
-        } catch (error: any) {
-            console.error('Error getting game:', error);
-            throw new Error(error.response?.data?.error || 'Failed to get game');
+    static async getGame(gameId: number, retryCount = 3): Promise<any> {
+        let lastError;
+        for (let i = 0; i < retryCount; i++) {
+            try {
+                const response = await axiosInstance.get(`/games/${gameId}/`);
+                console.log('Game center coordinates:', response.data.center?.coordinates);
+                return response.data;
+            } catch (error: any) {
+                lastError = error;
+                if (error.code === 'ERR_NETWORK') {
+                    // Wait before retrying (exponential backoff)
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                    continue;
+                }
+                throw new Error(error.response?.data?.error || 'Failed to fetch game');
+            }
         }
+        console.error('Failed after retries:', lastError);
+        throw new Error('Server is currently unavailable. Please try again later.');
     }
 
     static async getCurrentUser() {
@@ -84,34 +107,60 @@ export class ApiService {
         }
     }
 
-    static async createGame(area?: number[][][]) {
+    static async createGame(data: { 
+        kittyValuePerPlayer: number;
+        center: [number, number];
+        radius: number;
+        area_set: boolean;
+    }) {
         try {
-            const response = await axiosInstance.post('/games/', { area });
+            // Format kitty value to exactly 2 decimal places
+            const kittyValue = Math.round(data.kittyValuePerPlayer * 100) / 100;
+            
+            const formattedData = {
+                kitty_value_per_player: kittyValue,
+                center: {
+                    type: 'Point',
+                    coordinates: [data.center[1], data.center[0]]
+                },
+                radius: data.radius,
+                area_set: data.area_set
+            };
+
+            console.log('Sending formatted data to server:', formattedData);
+            const response = await axiosInstance.post('/games/', formattedData);
             return response.data;
         } catch (error: any) {
+            console.error('Server response:', error.response?.data);
             throw new Error(error.response?.data?.error || 'Failed to create game');
         }
     }
 
-    static logout() {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+    static async logout() {
+        try {
+            // Call backend logout endpoint if you have one
+            await axiosInstance.post('/logout/');
+        } catch (error) {
+            console.error('Logout error:', error);
+        } finally {
+            // Always clear local storage
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            
+            // Clear any other stored data
+            localStorage.clear();
+        }
     }
 
-    static async startGame(gameId: number) {
+    static async startGame(gameId: number): Promise<any> {
         try {
-            console.log(`Starting game ${gameId} with token:`, localStorage.getItem('token'));
             const response = await axiosInstance.post(`/games/${gameId}/start/`);
-            console.log('Start game response:', response.data);
+            // Force a refresh of game data after starting
+            await this.getGame(gameId);
             return response.data;
         } catch (error: any) {
-            console.error('Start game error details:', {
-                response: error.response?.data,
-                status: error.response?.status,
-                headers: error.response?.headers,
-                config: error.config
-            });
-            throw new Error(error.response?.data?.message || error.response?.data?.error || 'Failed to start game');
+            console.error('Error starting game:', error);
+            throw new Error(error.response?.data?.error || 'Failed to start game');
         }
     }
 
@@ -156,6 +205,88 @@ export class ApiService {
         } catch (error: any) {
             console.error('Set area error:', error.response || error);
             throw new Error(error.response?.data?.error || 'Failed to set game area');
+        }
+    }
+
+    static async getGameMessages(gameId: number, retryCount = 3): Promise<Message[]> {
+        let lastError;
+        for (let i = 0; i < retryCount; i++) {
+            try {
+                const response = await axiosInstance.get(`/games/${gameId}/messages/`);
+                return response.data;
+            } catch (error: any) {
+                lastError = error;
+                if (error.code === 'ERR_NETWORK') {
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                    continue;
+                }
+                throw new Error(error.response?.data?.error || 'Failed to fetch messages');
+            }
+        }
+        console.error('Failed after retries:', lastError);
+        throw new Error('Server is currently unavailable. Please try again later.');
+    }
+
+    static async sendGameMessage(gameId: number, content: string): Promise<Message> {
+        try {
+            console.log('Sending message:', { gameId, content });
+            const response = await axiosInstance.post(`/games/${gameId}/messages/`, { 
+                message: content.trim()
+            });
+            console.log('Message response:', response.data);
+            return response.data;
+        } catch (error: any) {
+            console.error('Error sending message:', error);
+            throw new Error(error.response?.data?.error || 'Failed to send message');
+        }
+    }
+
+    static async updateGame(gameId: number, data: { 
+        kitty_value_per_player: number;
+        center: [number, number];
+        radius: number;
+        area_set: boolean;
+    }) {
+        try {
+            const kittyValue = Math.round(data.kitty_value_per_player * 100) / 100;
+            
+            // Convert from [lat, lng] to [lng, lat] for the backend
+            const formattedData = {
+                kitty_value_per_player: kittyValue,
+                center: {
+                    type: 'Point',
+                    coordinates: [data.center[1], data.center[0]] // Convert to [lng, lat]
+                },
+                radius: data.radius,
+                area_set: data.area_set
+            };
+            
+            console.log('Sending formatted data:', formattedData);
+            const response = await axiosInstance.put(`/games/${gameId}/`, formattedData);
+            return response.data;
+        } catch (error: any) {
+            console.error('Server response:', error.response?.data);
+            throw new Error(error.response?.data?.error || 'Failed to update game');
+        }
+    }
+
+    static async subtractFromKitty(gameId: number, amount: number): Promise<any> {
+        try {
+            const response = await axiosInstance.post(`/games/${gameId}/subtract-kitty/`, {
+                amount
+            });
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Failed to subtract from kitty');
+        }
+    }
+
+    static async endGame(gameId: number): Promise<any> {
+        try {
+            const response = await axiosInstance.post(`/games/${gameId}/end/`);
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Failed to end game');
         }
     }
 }
